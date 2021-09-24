@@ -3,6 +3,8 @@ import os
 import tqdm
 import torch
 import torch.optim as optim
+import torch.nn.functional as F
+import torch.utils.tensorboard as tbx
 import torchvision.utils as vutils
 
 
@@ -25,22 +27,27 @@ class Trainer:
         num_samples,
         device,
     ):
+        # Setup models, dataloader, optimizers and loss
         self.net_g = net_g
         self.net_d = net_d
         self.dataloader = dataloader
-        self.num_epochs = num_epochs
-        self.nz = nz
         self.opt_g = optim.Adam(net_g.parameters(), lr=lr, betas=betas)
         self.opt_d = optim.Adam(net_d.parameters(), lr=lr, betas=betas)
         self.criterion = criterion
-        self.ckpt_every = ckpt_every
-        self.ckpt_dir = ckpt_dir
-        self.log_dir = log_dir
-        self.fixed_noise = torch.randn(num_samples, nz, 1, 1, device=device)
+
+        # Setup training parameters
+        self.num_epochs = num_epochs
         self.device = device
+        self.nz = nz
         self.real_label = 1.0
         self.fake_label = 0.0
         self.iter = 0
+
+        # Setup checkpointing, evaluation and logging
+        self.ckpt_every = ckpt_every
+        self.ckpt_dir = ckpt_dir
+        self.fixed_noise = torch.randn(num_samples, nz, 1, 1, device=device)
+        self.log_writer = tbx.SummaryWriter(log_dir)
 
     def load_checkpoint(self):
         """Finds the last checkpoint in ckpt_dir and load states."""
@@ -71,19 +78,21 @@ class Trainer:
             ckpt_path,
         )
 
-    def log(self, samples, statistics):
-        pass
+    def log(self, samples, statistics, resize=256):
+        """Saves generated samples and training statistics to tensorboard logs."""
+
+        samples = F.interpolate(samples, resize)
+        grid = vutils.make_grid(samples, nrow=3, padding=2, normalize=True)
+        self.log_writer.add_image("Samples", grid, self.iter)
+        for k, v in statistics.items():
+            self.log_writer.add_scalar(k, v, self.iter)
 
     def eval(self):
         """Generates fake samples using fixed noise."""
 
         with torch.no_grad():
             fakes = self.net_g(self.fixed_noise).cpu()
-            samples = vutils.make_grid(fakes, padding=2, normalize=True)
-
-        # NOTE: You can implement FID or IS here
-
-        return samples
+            return fakes
 
     def train_step(self, data):
         """Performs a GAN Training step and reports statistics."""
