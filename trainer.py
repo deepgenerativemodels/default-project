@@ -3,6 +3,7 @@ import os
 import tqdm
 import torch
 import torch.optim as optim
+import torchvision.utils as vutils
 
 
 class Trainer:
@@ -21,6 +22,7 @@ class Trainer:
         ckpt_every,
         ckpt_dir,
         log_dir,
+        num_samples,
         device,
     ):
         self.net_g = net_g
@@ -34,6 +36,7 @@ class Trainer:
         self.ckpt_every = ckpt_every
         self.ckpt_dir = ckpt_dir
         self.log_dir = log_dir
+        self.fixed_noise = torch.randn(num_samples, nz, 1, 1, device=device)
         self.device = device
         self.real_label = 1.0
         self.fake_label = 0.0
@@ -72,7 +75,15 @@ class Trainer:
         pass
 
     def eval(self):
-        pass
+        """Generates fake samples using fixed noise."""
+
+        with torch.no_grad():
+            fakes = self.net_g(self.fixed_noise).cpu()
+            samples = vutils.make_grid(fakes, padding=2, normalize=True)
+
+        # NOTE: You can implement FID or IS here
+
+        return samples
 
     def train_step(self, data):
         """Performs a GAN Training step and reports statistics."""
