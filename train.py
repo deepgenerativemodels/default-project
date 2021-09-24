@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 
 def parse_args():
-    """Parse command line arguments."""
+    """Parses command line arguments."""
     root_dir = os.path.abspath(os.path.dirname(__file__))
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -56,7 +56,9 @@ def parse_args():
     return parser.parse_args()
 
 
-def download_data(dst_dir):
+def download_data(
+    dst_dir, url="http://vision.stanford.edu/aditya86/ImageNetDogs/images.tar"
+):
     """Downloads and uncompresses the Stanford Dogs dataset."""
 
     def update_download_progress(blk_n=1, blk_sz=1, total_sz=None):
@@ -66,7 +68,6 @@ def download_data(dst_dir):
             pbar.total = total_sz
         pbar.update(blk_n * blk_sz - pbar.n)
 
-    url = "http://vision.stanford.edu/aditya86/ImageNetDogs/images.tar"
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = os.path.join(tmp_dir, "compressed_data")
         with tqdm(unit="B", unit_scale=True, desc="Downloading Dataset") as pbar:
@@ -86,9 +87,11 @@ def get_images(img_dir):
 
 def train(args):
     """Sets up environment, configures and trains model."""
-    # Setup dataset and output directories
+    # Setup dataset
     if not os.path.exists(args.data_dir):
         download_data(args.data_dir)
+
+    # Check existing experiment
     exp_dir = os.path.join(args.out_dir, args.name)
     if os.path.exists(exp_dir) and not args.resume:
         raise FileExistsError(
@@ -96,6 +99,8 @@ def train(args):
             "Set '--resume' if you wish to resume training or "
             "change '--name' if you wish to start a new experiment."
         )
+
+    # Setup output directories
     log_dir = os.path.join(exp_dir, "log")
     ckpt_dir = os.path.join(exp_dir, "ckpt")
     for d in [args.out_dir, exp_dir, log_dir, ckpt_dir]:
@@ -103,6 +108,8 @@ def train(args):
             os.mkdir(d)
 
     # Configure models and trainer
+
+    # Train model
     pass
 
 
