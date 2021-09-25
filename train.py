@@ -7,6 +7,7 @@ import urllib.request
 from tqdm import tqdm
 import torch
 import torch.nn as nn
+import torch.optim as optim
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 
@@ -59,7 +60,7 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--seed", type=int, default=0, help="Manual seed for reproducibility."
+        "--seed", type=int, default=236, help="Manual seed for reproducibility."
     )
 
     return parser.parse_args()
@@ -135,40 +136,31 @@ def train(args):
     torch.manual_seed(args.seed)
 
     # Set parameters
-    nz, ngf, nc, ndf, imsize, batch_size = 100, 64, 3, 64, 64, 128
-    num_epochs, lr, betas, ckpt_every, train_ratio, num_samples = (
-        60,
-        0.0002,
-        (0.5, 0.999),
-        50,
-        2,
-        9,
-    )
-    criterion = nn.BCELoss()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    nz, ngf, nc, ndf, imsize, batch_size = 100, 64, 3, 64, 64, 128
+    num_epochs, lr, betas, ckpt_every = 60, 0.0002, (0.5, 0.999), 250
 
-    # Configure and initialize models
-    net_g = models.Generator(nz, ngf, nc).to(device)
+    # Configure models and optimizers
+    net_g = models.Generator(nz, ngf, nc)
     net_g.apply(models.weights_init)
-    net_d = models.Discriminator(nc, ndf, imsize).to(device)
+    net_d = models.Discriminator(nc, ndf, imsize)
     net_d.apply(models.weights_init)
+    opt_g = optim.Adam(net_g.parameters(), lr, betas)
+    opt_d = optim.Adam(net_d.parameters(), lr, betas)
 
-    # Configure dataloader and trainer
+    # Configure criterion, dataloader and trainer
+    criterion = nn.BCELoss()
     dataloader = prepare_data(args.data_dir, imsize, batch_size)
     trainer_ = trainer.Trainer(
         net_g,
         net_d,
-        dataloader,
-        num_epochs,
-        nz,
-        lr,
-        betas,
+        opt_g,
+        opt_d,
         criterion,
-        train_ratio,
-        ckpt_every,
-        ckpt_dir,
+        dataloader,
+        nz,
         log_dir,
-        num_samples,
+        ckpt_dir,
         device,
     )
 
@@ -177,7 +169,7 @@ def train(args):
         trainer_.load_checkpoint()
 
     # Train model
-    trainer_.train()
+    trainer_.train(num_epochs, ckpt_every)
 
 
 if __name__ == "__main__":
