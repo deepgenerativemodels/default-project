@@ -4,7 +4,7 @@ import tempfile
 import argparse
 import urllib.request
 
-import tqdm
+from tqdm import tqdm
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
@@ -79,13 +79,13 @@ def download_data(
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = os.path.join(tmp_dir, "compressed_data")
-        with tqdm.tqdm(unit="B", unit_scale=True, desc="Downloading Dataset") as pbar:
+        with tqdm(unit="B", unit_scale=True, desc="Downloading Dataset") as pbar:
             update_download_progress.pbar = pbar
             urllib.request.urlretrieve(
                 url, tmp_path, reporthook=update_download_progress
             )
         with tarfile.open(tmp_path, "r") as f:
-            for member in tqdm.tqdm(f.getmembers(), desc="Extracting Dataset"):
+            for member in tqdm(f.getmembers(), desc="Extracting Dataset"):
                 f.extract(member, path=dst_dir)
 
 
@@ -136,14 +136,21 @@ def train(args):
 
     # Set parameters
     nz, ngf, nc, ndf, imsize, batch_size = 100, 64, 3, 64, 64, 128
-    num_epochs, lr, betas, ckpt_every, num_samples = 50, 0.0002, (0.5, 0.999), 50, 9
+    num_epochs, lr, betas, ckpt_every, train_ratio, num_samples = (
+        60,
+        0.0002,
+        (0.5, 0.999),
+        50,
+        2,
+        9,
+    )
     criterion = nn.BCELoss()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Configure and initialize models
     net_g = models.Generator(nz, ngf, nc).to(device)
     net_g.apply(models.weights_init)
-    net_d = models.Discriminator(nc, ndf).to(device)
+    net_d = models.Discriminator(nc, ndf, imsize).to(device)
     net_d.apply(models.weights_init)
 
     # Configure dataloader and trainer
@@ -157,6 +164,7 @@ def train(args):
         lr,
         betas,
         criterion,
+        train_ratio,
         ckpt_every,
         ckpt_dir,
         log_dir,
