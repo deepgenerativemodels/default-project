@@ -41,7 +41,7 @@ class Trainer:
         self.nz = nz
         self.real_label = 1.0
         self.fake_label = 0.0
-        self.iter = 0
+        self.step = 0
 
         # Setup checkpointing, evaluation and logging
         self.ckpt_every = ckpt_every
@@ -61,19 +61,19 @@ class Trainer:
             self.net_d.load_state_dict(last_ckpt["net_d"])
             self.opt_g.load_state_dict(last_ckpt["opt_g"])
             self.opt_d.load_state_dict(last_ckpt["opt_d"])
-            self.iter = last_ckpt["iter"]
+            self.step = last_ckpt["step"]
 
     def save_checkpoint(self):
         """Saves trainer states."""
 
-        ckpt_path = os.path.join(self.ckpt_dir, f"{self.iter}.pth")
+        ckpt_path = os.path.join(self.ckpt_dir, f"{self.step}.pth")
         torch.save(
             {
                 "net_g": self.net_g.state_dict(),
                 "net_d": self.net_d.state_dict(),
                 "opt_g": self.opt_g.state_dict(),
                 "opt_d": self.opt_d.state_dict(),
-                "iter": self.iter,
+                "step": self.step,
             },
             ckpt_path,
         )
@@ -83,9 +83,9 @@ class Trainer:
 
         samples = F.interpolate(samples, resize)
         grid = vutils.make_grid(samples, nrow=3, padding=2, normalize=True)
-        self.log_writer.add_image("Samples", grid, self.iter)
+        self.log_writer.add_image("Samples", grid, self.step)
         for k, v in statistics.items():
-            self.log_writer.add_scalar(k, v, self.iter)
+            self.log_writer.add_scalar(k, v, self.step)
 
     def eval(self):
         """Generates fake samples using fixed noise."""
@@ -143,12 +143,12 @@ class Trainer:
             for data, _ in tqdm_dataloader:
                 statistics = self.train_step(data)
                 tqdm_dataloader.set_description(
-                    f"Epoch:{epoch}|Iter:{self.iter}|"
+                    f"Epoch:{epoch}|Iter:{self.step}|"
                     + "|".join(f"{k}:{v:.2f}" for k, v in statistics.items())
                 )
 
-                if self.iter % self.ckpt_every == 0:
+                if self.step % self.ckpt_every == 0:
                     self.log(self.eval(), statistics)
                     self.save_checkpoint()
 
-                self.iter += 1
+                self.step += 1

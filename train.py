@@ -135,8 +135,8 @@ def train(args):
     torch.manual_seed(args.seed)
 
     # Set parameters
-    nz, ngf, nc, ndf, imsize, batch_size = 100, 64, 3, 64, 64, 64
-    num_epochs, lr, betas, ckpt_every, num_samples = 10, 0.0002, (0.5, 0.999), 100, 9
+    nz, ngf, nc, ndf, imsize, batch_size = 100, 64, 3, 64, 64, 128
+    num_epochs, lr, betas, ckpt_every, num_samples = 50, 0.0002, (0.5, 0.999), 50, 9
     criterion = nn.BCELoss()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
