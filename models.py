@@ -20,9 +20,7 @@ class Generator(nn.Module):
     def __init__(self, nz, ngf, nc):
         super().__init__()
         self.net = nn.Sequential(
-            nn.ConvTranspose2d(
-                nz, ngf * 8, kernel_size=4, stride=1, padding=0, bias=False
-            ),
+            nn.ConvTranspose2d(nz, ngf * 8, 4, 1, 0, bias=False),
             nn.BatchNorm2d(ngf * 8),
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
@@ -46,7 +44,7 @@ class Generator(nn.Module):
 class Discriminator(nn.Module):
     """Discriminator defines the discriminator network."""
 
-    def __init__(self, nc, ndf, imsize):
+    def __init__(self, nc, ndf):
         super().__init__()
         self.net = nn.Sequential(
             nn.Conv2d(nc, ndf, 4, 2, 1, bias=False),

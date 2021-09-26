@@ -78,6 +78,7 @@ class Trainer:
         self.log_writer.add_image("Samples", grid, self.step)
         for k, v in statistics.items():
             self.log_writer.add_scalar(k, v, self.step)
+        self.log_writer.flush()
 
     def eval(self):
         """Generates fake samples using fixed noise."""
@@ -119,10 +120,10 @@ class Trainer:
 
         return loss_d.item(), real_preds.mean().item()
 
-    def train(self, num_epochs, ckpt_every):
+    def train(self, max_steps, ckpt_every):
         """Performs GAN training and logs progress."""
 
-        for epoch in range(num_epochs):
+        while True:
             tqdm_dataloader = tqdm(self.dataloader)
             for data, _ in tqdm_dataloader:
 
@@ -148,12 +149,12 @@ class Trainer:
                 statistics = {
                     "loss_g": loss_g,
                     "loss_d": loss_d,
-                    "mean_real_pred": mean_real_pred,
-                    "mean_fake_pred": mean_fake_pred,
+                    "D(x)": mean_real_pred,
+                    "D(G(z))": mean_fake_pred,
                 }
                 tqdm_dataloader.set_description(
                     "|".join(
-                        [f"epoch={epoch}", f"step={self.step}"]
+                        [f"step={self.step}"]
                         + [f"{k}={v:.2f}" for k, v in statistics.items()]
                     )
                 )
@@ -164,3 +165,5 @@ class Trainer:
                     self.save_checkpoint()
 
                 self.step += 1
+                if self.step >= max_steps:
+                    return
