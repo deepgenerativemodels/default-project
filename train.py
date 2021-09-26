@@ -1,4 +1,5 @@
 import os
+import pprint
 import tarfile
 import tempfile
 import argparse
@@ -60,7 +61,22 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--seed", type=int, default=236, help="Manual seed for reproducibility."
+        "--seed", type=int, default=0, help="Manual seed for reproducibility."
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=256,
+        help="Minibatch size used during training.",
+    )
+    parser.add_argument(
+        "--max_steps", type=int, default=35000, help="Number of steps to train for."
+    )
+    parser.add_argument(
+        "--ckpt_every",
+        type=int,
+        default=250,
+        help="Number of steps between checkpointing.",
     )
 
     return parser.parse_args()
@@ -112,6 +128,9 @@ def prepare_data(data_dir, imsize, batch_size):
 def train(args):
     """Sets up environment, configures and trains model."""
 
+    # Print command line arguments
+    pprint.pprint(vars(args))
+
     # Setup dataset
     if not os.path.exists(args.data_dir):
         download_data(args.data_dir)
@@ -137,20 +156,19 @@ def train(args):
 
     # Set parameters
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    nz, ngf, nc, ndf, imsize, batch_size = 100, 64, 3, 64, 64, 128
-    num_epochs, lr, betas, ckpt_every = 60, 0.0002, (0.5, 0.999), 250
+    nz, ngf, nc, ndf, imsize, lr, betas = 100, 64, 3, 64, 64, 0.0002, (0.5, 0.999)
 
     # Configure models and optimizers
     net_g = models.Generator(nz, ngf, nc)
     net_g.apply(models.weights_init)
-    net_d = models.Discriminator(nc, ndf, imsize)
+    net_d = models.Discriminator(nc, ndf)
     net_d.apply(models.weights_init)
     opt_g = optim.Adam(net_g.parameters(), lr, betas)
     opt_d = optim.Adam(net_d.parameters(), lr, betas)
 
     # Configure criterion, dataloader and trainer
     criterion = nn.BCELoss()
-    dataloader = prepare_data(args.data_dir, imsize, batch_size)
+    dataloader = prepare_data(args.data_dir, imsize, args.batch_size)
     trainer_ = trainer.Trainer(
         net_g,
         net_d,
@@ -169,7 +187,7 @@ def train(args):
         trainer_.load_checkpoint()
 
     # Train model
-    trainer_.train(num_epochs, ckpt_every)
+    trainer_.train(args.max_steps, args.ckpt_every)
 
 
 if __name__ == "__main__":
