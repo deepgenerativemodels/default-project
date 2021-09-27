@@ -12,7 +12,7 @@ import torch.optim as optim
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 
-import models
+import model
 import trainer
 
 
@@ -66,16 +66,22 @@ def parse_args():
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=256,
+        default=64,
         help="Minibatch size used during training.",
     )
     parser.add_argument(
-        "--max_steps", type=int, default=35000, help="Number of steps to train for."
+        "--max_steps", type=int, default=30000, help="Number of steps to train for."
+    )
+    parser.add_argument(
+        "--log_every",
+        type=int,
+        default=100,
+        help="Number of steps between checkpointing.",
     )
     parser.add_argument(
         "--ckpt_every",
         type=int,
-        default=250,
+        default=1000,
         help="Number of steps between checkpointing.",
     )
 
@@ -156,25 +162,29 @@ def train(args):
 
     # Set parameters
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    nz, ngf, nc, ndf, imsize, lr, betas = 100, 64, 3, 64, 64, 0.0002, (0.5, 0.999)
+    nz, ngf, ndf, imsize, lr, betas, repeat_d = (
+        128,
+        1024,
+        1024,
+        64,
+        2e-4,
+        (0.0, 0.9),
+        5,
+    )
 
     # Configure models and optimizers
-    net_g = models.Generator(nz, ngf, nc)
-    net_g.apply(models.weights_init)
-    net_d = models.Discriminator(nc, ndf)
-    net_d.apply(models.weights_init)
+    net_g = model.Generator(nz, ngf)
+    net_d = model.Discriminator(ndf)
     opt_g = optim.Adam(net_g.parameters(), lr, betas)
     opt_d = optim.Adam(net_d.parameters(), lr, betas)
 
-    # Configure criterion, dataloader and trainer
-    criterion = nn.BCELoss()
+    # Configure dataloader and trainer
     dataloader = prepare_data(args.data_dir, imsize, args.batch_size)
     trainer_ = trainer.Trainer(
         net_g,
         net_d,
         opt_g,
         opt_d,
-        criterion,
         dataloader,
         nz,
         log_dir,
@@ -182,12 +192,8 @@ def train(args):
         device,
     )
 
-    # Load last checkpoint if specified
-    if args.resume:
-        trainer_.load_checkpoint()
-
     # Train model
-    trainer_.train(args.max_steps, args.ckpt_every)
+    trainer_.train(args.max_steps, repeat_d, args.log_every, args.ckpt_every)
 
 
 if __name__ == "__main__":
