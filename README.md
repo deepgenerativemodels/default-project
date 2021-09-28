@@ -13,8 +13,8 @@ conda activate cs236-dp
 python train.py --name test
 ```
 
-* View command line options.
+* Visualize experiments using Tensorboard.
 
 ```shell
-python train.py --help
+tensorboard --logdir out
 ```
