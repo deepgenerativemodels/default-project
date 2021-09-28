@@ -17,7 +17,9 @@ import trainer
 
 
 def parse_args():
-    """Parses command line arguments."""
+    r"""
+    Parses command line arguments.
+    """
 
     root_dir = os.path.abspath(os.path.dirname(__file__))
     parser = argparse.ArgumentParser()
@@ -70,7 +72,13 @@ def parse_args():
         help="Minibatch size used during training.",
     )
     parser.add_argument(
-        "--max_steps", type=int, default=30000, help="Number of steps to train for."
+        "--max_steps", type=int, default=100000, help="Number of steps to train for."
+    )
+    parser.add_argument(
+        "--repeat_d",
+        type=int,
+        default=5,
+        help="Number of discriminator updates before a generator update.",
     )
     parser.add_argument(
         "--log_every",
@@ -91,7 +99,9 @@ def parse_args():
 def download_data(
     dst_dir, url="http://vision.stanford.edu/aditya86/ImageNetDogs/images.tar"
 ):
-    """Downloads and uncompresses the specified dataset."""
+    r"""
+    Downloads and uncompresses the specified dataset.
+    """
 
     def update_download_progress(blk_n=1, blk_sz=1, total_sz=None):
         assert update_download_progress.pbar is not None
@@ -113,7 +123,9 @@ def download_data(
 
 
 def prepare_data(data_dir, imsize, batch_size):
-    """Creates a dataloader from a directory containing image data."""
+    r"""
+    Creates a dataloader from a directory containing image data.
+    """
 
     transform = transforms.Compose(
         [
@@ -132,7 +144,9 @@ def prepare_data(data_dir, imsize, batch_size):
 
 
 def train(args):
-    """Sets up environment, configures and trains model."""
+    r"""
+    Sets up environment, configures and trains model.
+    """
 
     # Print command line arguments
     pprint.pprint(vars(args))
@@ -162,19 +176,20 @@ def train(args):
 
     # Set parameters
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    nz, ngf, ndf, imsize, lr, betas, repeat_d = (
+    nz, bw, ngf, ndf, nc, imsize, lr, betas = (
         128,
+        4,
         1024,
         1024,
+        3,
         64,
         2e-4,
         (0.0, 0.9),
-        5,
     )
 
     # Configure models and optimizers
-    net_g = model.Generator(nz, ngf)
-    net_d = model.Discriminator(ndf)
+    net_g = model.Generator(nz, ngf, bw, nc, imsize)
+    net_d = model.Discriminator(nc, ndf)
     opt_g = optim.Adam(net_g.parameters(), lr, betas)
     opt_d = optim.Adam(net_d.parameters(), lr, betas)
 
@@ -193,7 +208,7 @@ def train(args):
     )
 
     # Train model
-    trainer_.train(args.max_steps, repeat_d, args.log_every, args.ckpt_every)
+    trainer_.train(args.max_steps, args.repeat_d, args.log_every, args.ckpt_every)
 
 
 if __name__ == "__main__":

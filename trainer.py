@@ -8,7 +8,19 @@ import torchvision.utils as vutils
 
 
 class Trainer:
-    """Trainer performs GAN training, checkpointing and logging."""
+    r"""
+    Trainer performs GAN training, checkpointing and logging.
+    Attributes:
+        net_g (Module): Torch generator model.
+        net_d (Module): Torch discriminator model.
+        opt_g (Optimizer): Torch optimizer for generator.
+        opt_d (Optimizer): Torch optimizer for discriminator.
+        dataloader (Dataloader): Torch training set dataloader.
+        nz (int): Generator input / noise dimension.
+        log_dir (str): Path to store log outputs.
+        ckpt_dir (str): Path to store and load checkpoints.
+        device (Device): Torch device to dispatch data to.
+    """
 
     def __init__(
         self,
@@ -40,7 +52,9 @@ class Trainer:
         self.ckpt_dir = ckpt_dir
 
     def _load_checkpoint(self):
-        """Finds the last checkpoint in ckpt_dir and load states."""
+        r"""
+        Finds the last checkpoint in ckpt_dir and load states.
+        """
 
         ckpt_paths = [f for f in os.listdir(self.ckpt_dir) if f.endswith(".pth")]
         if ckpt_paths:  # Train from scratch if no checkpoints were found
@@ -54,7 +68,9 @@ class Trainer:
             self.step = last_ckpt["step"]
 
     def _save_checkpoint(self):
-        """Saves trainer states."""
+        r"""
+        Saves model, optimizer and trainer states.
+        """
 
         ckpt_path = os.path.join(self.ckpt_dir, f"{self.step}.pth")
         torch.save(
@@ -69,17 +85,23 @@ class Trainer:
         )
 
     def _compute_loss_g(self, fake_preds):
-        """Calculates generator hinge loss."""
+        r"""
+        Calculates generator hinge loss.
+        """
 
         return -fake_preds.mean()
 
     def _compute_loss_d(self, real_preds, fake_preds):
-        """Calculates discriminator hinge loss."""
+        r"""
+        Calculates discriminator hinge loss.
+        """
 
         return F.relu(1.0 - real_preds).mean() + F.relu(1.0 + fake_preds).mean()
 
     def _train_step_g(self, noise):
-        """Performs a generator training step."""
+        r"""
+        Performs a generator training step.
+        """
 
         fakes = self.net_g(noise)
         fake_preds = self.net_d(fakes).view(-1)
@@ -92,7 +114,9 @@ class Trainer:
         return loss_g.item(), fake_preds.mean().item()
 
     def _train_step_d(self, reals, noise):
-        """Performs a discriminator training step."""
+        r"""
+        Performs a discriminator training step.
+        """
 
         real_preds = self.net_d(reals).view(-1)
         fakes = self.net_g(noise).detach()
@@ -106,7 +130,9 @@ class Trainer:
         return loss_d.item(), real_preds.mean().item()
 
     def _log(self, loss_g, loss_d, real_pred, fake_pred):
-        """Record losses and samples."""
+        r"""
+        Records losses and samples.
+        """
 
         with torch.no_grad():
             samples = self.net_g(self.fixed_noise)
@@ -120,7 +146,14 @@ class Trainer:
         self.log_writer.flush()
 
     def train(self, max_steps, repeat_d, log_every, ckpt_every):
-        """Performs GAN training and logs progress."""
+        r"""
+        Performs GAN training, checkpointing and logging.
+        Attributes:
+            max_steps (int): Number of steps before stopping.
+            repeat_d (int): Number of discriminator updates before a generator update.
+            log_every (int): Number of steps before logging to Tensorboard.
+            ckpt_every (int): Number of steps before checkpointing models.
+        """
 
         self._load_checkpoint()
 
