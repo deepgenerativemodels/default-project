@@ -93,8 +93,11 @@ def parse_args():
         help="Number of steps between checkpointing.",
     )
     parser.add_argument(
-            "--device", type=str, default=("cuda:0" if torch.cuda.is_available() else "cpu"), help="Device to train on."
-            )
+        "--device",
+        type=str,
+        default=("cuda:0" if torch.cuda.is_available() else "cpu"),
+        help="Device to train on.",
+    )
 
     return parser.parse_args()
 
@@ -151,7 +154,7 @@ def train(args):
     Sets up environment, configures and trains model.
     """
 
-    # Print command line arguments
+    # Print command line arguments and architectures
     pprint.pprint(vars(args))
 
     # Setup dataset
@@ -181,19 +184,22 @@ def train(args):
     nz, bw, ngf, ndf, nc, imsize, lr, betas = (
         128,
         4,
-        1024,
-        1024,
+        256,
+        128,
         3,
-        64,
+        32,
         2e-4,
         (0.0, 0.9),
     )
 
-    # Configure models and optimizers
-    net_g = model.Generator(nz, ngf, bw, nc, imsize)
+    # Configure models, optimizers and schedulers
+    net_g = model.Generator(nz, ngf, bw, nc)
     net_d = model.Discriminator(nc, ndf)
     opt_g = optim.Adam(net_g.parameters(), lr, betas)
     opt_d = optim.Adam(net_d.parameters(), lr, betas)
+    linear_sch = lambda s: 1.0 - (s / args.max_steps)
+    sch_g = optim.lr_scheduler.LambdaLR(opt_g, lr_lambda=linear_sch)
+    sch_d = optim.lr_scheduler.LambdaLR(opt_d, lr_lambda=linear_sch)
 
     # Configure dataloader and trainer
     dataloader = prepare_data(args.data_dir, imsize, args.batch_size)
@@ -202,6 +208,8 @@ def train(args):
         net_d,
         opt_g,
         opt_d,
+        sch_g,
+        sch_d,
         dataloader,
         nz,
         log_dir,
