@@ -1,9 +1,6 @@
 r"""Baseline GAN architecture
 
-The baseline GAN consists of a Generator with skip connections and 
-a Discriminator with residual blocks as described in Analyzing and 
-Improving the Image Quality of StyleGAN (Karras 2020).
-The architecture is also based on the SNGAN implementation from
+The architecture is based on the Residual SNGAN implementation from
 Mimicry: Towards the Reproducibility of GAN Research (Lee 2020).
 """
 
@@ -127,50 +124,41 @@ class GBlock(nn.Module):
         out_channels (int): The channel size of output feature map.
     """
 
-    def __init__(self, in_channels, out_channels, nc, imsize):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
 
-        self.imsize = imsize
-
-        self.c1 = SNConv2d(in_channels, out_channels, 3, 1, padding=1)
-        self.c2 = SNConv2d(out_channels, out_channels, 3, 1, padding=1)
-        self.sc = SNConv2d(out_channels, nc, 1, 1, padding=0)
+        self.c1 = SNConv2d(in_channels, out_channels, 3, 1, 1)
+        self.c2 = SNConv2d(out_channels, out_channels, 3, 1, 1)
+        self.c3 = SNConv2d(in_channels, out_channels, 1, 1, 0)
         self.b1 = nn.BatchNorm2d(in_channels)
         self.b2 = nn.BatchNorm2d(out_channels)
-        self.b3 = nn.BatchNorm2d(nc)
         self.activation = nn.ReLU(True)
 
         nn.init.xavier_uniform_(self.c1.weight.data, math.sqrt(2.0))
         nn.init.xavier_uniform_(self.c2.weight.data, math.sqrt(2.0))
-        nn.init.xavier_uniform_(self.sc.weight.data, 1.0)
+        nn.init.xavier_uniform_(self.c3.weight.data, 1.0)
 
-    def _upsample_conv(self, x, conv, scale_factor):
+    def _upsample_conv(self, x, conv):
         return conv(
-            F.interpolate(
-                x, scale_factor=scale_factor, mode="bilinear", align_corners=False
-            )
+            F.interpolate(x, scale_factor=2, mode="bilinear", align_corners=False)
         )
 
-    def _block(self, x):
+    def _residual(self, x):
         h = x
         h = self.b1(h)
         h = self.activation(h)
-        h = self._upsample_conv(h, self.c1, 2)
+        h = self._upsample_conv(h, self.c1)
         h = self.b2(h)
         h = self.activation(h)
         h = self.c2(h)
         return h
 
-    def _skip(self, h, s=None):
-        h = self._upsample_conv(h, self.sc, self.imsize // h.size(2))
-        s = h if s is None else h + s
-        s = self.b3(s)
-        return s
+    def _shortcut(self, x):
+        x = self._upsample_conv(x, self.c3)
+        return x
 
-    def forward(self, x, s=None):
-        h = self._block(x)
-        s = self._skip(h, s)
-        return h, s
+    def forward(self, x):
+        return self._residual(x) + self._shortcut(x)
 
 
 class DBlock(nn.Module):
@@ -179,31 +167,38 @@ class DBlock(nn.Module):
     Attributes:
         in_channels (int): The channel size of input feature map.
         out_channels (int): The channel size of output feature map.
+        downsample (bool): Enable 2x downsampling using avgpool.
     """
 
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, downsample=True):
         super().__init__()
+
+        self.downsample = downsample
 
         self.c1 = SNConv2d(in_channels, in_channels, 3, 1, 1)
         self.c2 = SNConv2d(in_channels, out_channels, 3, 1, 1)
-        self.c_sc = SNConv2d(in_channels, out_channels, 1, 1, 0)
+        if downsample:
+            self.c3 = SNConv2d(in_channels, out_channels, 1, 1, 0)
         self.activation = nn.ReLU(True)
 
         nn.init.xavier_uniform_(self.c1.weight.data, math.sqrt(2.0))
         nn.init.xavier_uniform_(self.c2.weight.data, math.sqrt(2.0))
-        nn.init.xavier_uniform_(self.c_sc.weight.data, 1.0)
+        if downsample:
+            nn.init.xavier_uniform_(self.c3.weight.data, 1.0)
 
     def _residual(self, x):
         h = x
         h = self.c1(h)
         h = self.activation(h)
         h = self.c2(h)
-        h = F.avg_pool2d(h, 2)
+        if self.downsample:
+            h = F.avg_pool2d(h, 2)
         return h
 
     def _shortcut(self, x):
-        x = self.c_sc(x)
-        x = F.avg_pool2d(x, 2)
+        if self.downsample:
+            x = self.c3(x)
+            x = F.avg_pool2d(x, 2)
         return x
 
     def forward(self, x):
@@ -218,32 +213,34 @@ class Generator(nn.Module):
         ngf (int): Variable controlling generator feature map sizes.
         bw (int): Starting width for upsampling generator output to an image.
         nc (int): Final output channel dimension.
-        imsize (int): Final output spatial dimension.
     """
 
-    def __init__(self, nz=128, ngf=1024, bw=4, nc=3, imsize=64):
+    def __init__(self, nz=128, ngf=256, bw=4, nc=3):
         super().__init__()
 
+        self.bw = bw
+
         self.l1 = nn.Linear(nz, (bw ** 2) * ngf)
-        self.unflatten = nn.Unflatten(1, (-1, bw, bw))
-        self.block2 = GBlock(ngf, ngf >> 1, nc, imsize)
-        self.block3 = GBlock(ngf >> 1, ngf >> 2, nc, imsize)
-        self.block4 = GBlock(ngf >> 2, ngf >> 3, nc, imsize)
-        self.block5 = GBlock(ngf >> 3, ngf >> 4, nc, imsize)
+        self.block2 = GBlock(ngf, ngf)
+        self.block3 = GBlock(ngf, ngf)
+        self.block4 = GBlock(ngf, ngf)
+        self.b5 = nn.BatchNorm2d(ngf)
+        self.c6 = nn.Conv2d(ngf, nc, 3, 1, padding=1)
+        self.activation = nn.ReLU(True)
 
         nn.init.xavier_uniform_(self.l1.weight.data, 1.0)
-
-    def _upsample_conv(self, x, conv):
-        return conv(F.interpolate(x, self.imsize, mode="bilinear", align_corners=False))
+        nn.init.xavier_uniform_(self.c6.weight.data, 1.0)
 
     def forward(self, x):
         h = self.l1(x)
-        h = self.unflatten(h)
-        h, s = self.block2(h)
-        h, s = self.block3(h, s)
-        h, s = self.block4(h, s)
-        _, s = self.block5(h, s)
-        y = torch.tanh(s)
+        h = h.view(h.size(0), -1, self.bw, self.bw)
+        h = self.block2(h)
+        h = self.block3(h)
+        h = self.block4(h)
+        h = self.b5(h)
+        h = self.activation(h)
+        h = self.c6(h)
+        y = torch.tanh(h)
         return y
 
 
@@ -255,18 +252,17 @@ class Discriminator(nn.Module):
         ndf (int): Variable controlling discriminator feature map sizes.
     """
 
-    def __init__(self, nc=3, ndf=1024):
+    def __init__(self, nc=3, ndf=128):
         super().__init__()
 
-        self.block1 = DBlock(nc, ndf >> 4)
-        self.block2 = DBlock(ndf >> 4, ndf >> 3)
-        self.block3 = DBlock(ndf >> 3, ndf >> 2)
-        self.block4 = DBlock(ndf >> 2, ndf >> 1)
-        self.block5 = DBlock(ndf >> 1, ndf)
-        self.l6 = SNLinear(ndf, 1)
+        self.block1 = DBlock(nc, ndf)
+        self.block2 = DBlock(ndf, ndf)
+        self.block3 = DBlock(ndf, ndf, downsample=False)
+        self.block4 = DBlock(ndf, ndf, downsample=False)
+        self.l5 = SNLinear(ndf, 1)
         self.activation = nn.ReLU(True)
 
-        nn.init.xavier_uniform_(self.l6.weight.data, 1.0)
+        nn.init.xavier_uniform_(self.l5.weight.data, 1.0)
 
     def forward(self, x):
         h = x
@@ -278,8 +274,6 @@ class Discriminator(nn.Module):
         h = self.activation(h)
         h = self.block4(h)
         h = self.activation(h)
-        h = self.block5(h)
-        h = self.activation(h)
         h = torch.sum(h, dim=(2, 3))
-        y = self.l6(h)
+        y = self.l5(h)
         return y

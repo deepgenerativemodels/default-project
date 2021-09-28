@@ -15,6 +15,8 @@ class Trainer:
         net_d (Module): Torch discriminator model.
         opt_g (Optimizer): Torch optimizer for generator.
         opt_d (Optimizer): Torch optimizer for discriminator.
+        sch_g (Scheduler): Torch lr scheduler for generator.
+        sch_d (Scheduler): Torch lr scheduler for discriminator.
         dataloader (Dataloader): Torch training set dataloader.
         nz (int): Generator input / noise dimension.
         log_dir (str): Path to store log outputs.
@@ -28,17 +30,21 @@ class Trainer:
         net_d,
         opt_g,
         opt_d,
+        sch_g,
+        sch_d,
         dataloader,
         nz,
         log_dir,
         ckpt_dir,
         device,
     ):
-        # Setup models, dataloader, optimizers and loss
+        # Setup models, dataloader, optimizers
         self.net_g = net_g.to(device)
         self.net_d = net_d.to(device)
         self.opt_g = opt_g
         self.opt_d = opt_d
+        self.sch_g = sch_g
+        self.sch_d = sch_d
         self.dataloader = dataloader
 
         # Setup training parameters
@@ -65,6 +71,8 @@ class Trainer:
             self.net_d.load_state_dict(last_ckpt["net_d"])
             self.opt_g.load_state_dict(last_ckpt["opt_g"])
             self.opt_d.load_state_dict(last_ckpt["opt_d"])
+            self.sch_g.load_state_dict(last_ckpt["sch_g"])
+            self.sch_d.load_state_dict(last_ckpt["sch_d"])
             self.step = last_ckpt["step"]
 
     def _save_checkpoint(self):
@@ -79,6 +87,8 @@ class Trainer:
                 "net_d": self.net_d.state_dict(),
                 "opt_g": self.opt_g.state_dict(),
                 "opt_d": self.opt_d.state_dict(),
+                "sch_g": self.sch_g.state_dict(),
+                "sch_d": self.sch_d.state_dict(),
                 "step": self.step,
             },
             ckpt_path,
@@ -143,6 +153,8 @@ class Trainer:
         self.log_writer.add_scalar("L(D)", loss_d, self.step)
         self.log_writer.add_scalar("D(x)", real_pred, self.step)
         self.log_writer.add_scalar("D(G(z))", fake_pred, self.step)
+        self.log_writer.add_scalar("lr(G)", self.sch_g.get_last_lr()[0], self.step)
+        self.log_writer.add_scalar("lr(D)", self.sch_d.get_last_lr()[0], self.step)
         self.log_writer.flush()
 
     def train(self, max_steps, repeat_d, log_every, ckpt_every):
@@ -170,6 +182,10 @@ class Trainer:
                 if self.step % repeat_d == 0:
                     loss_g, fake_pred = self._train_step_g(noise)
 
+                # Update learning rate
+                self.sch_d.step()
+                self.sch_g.step()
+
                 pbar.set_description(
                     (
                         f"L(G):{loss_g:.2f}|L(D):{loss_d:.2f}|"
@@ -178,10 +194,10 @@ class Trainer:
                     )
                 )
 
-                if self.step % log_every == 0:
+                if self.step != 0 and self.step % log_every == 0:
                     self._log(loss_g, loss_d, real_pred, fake_pred)
 
-                if self.step % ckpt_every == 0:
+                if self.step != 0 and self.step % ckpt_every == 0:
                     self._save_checkpoint()
 
                 self.step += 1
