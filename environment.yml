@@ -1,0 +1,13 @@
+name: cs236-dp
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - tqdm
+  - cudatoolkit=11.1
+  - torchaudio
+  - torchvision
+  - pytorch
+  - tensorboard
+prefix: /deep/group/packages/miniconda3/envs/cs236-dp
