@@ -92,6 +92,9 @@ def parse_args():
         default=1000,
         help="Number of steps between checkpointing.",
     )
+    parser.add_argument(
+            "--device", type=str, default=("cuda:0" if torch.cuda.is_available() else "cpu"), help="Device to train on."
+            )
 
     return parser.parse_args()
 
@@ -175,7 +178,6 @@ def train(args):
     torch.manual_seed(args.seed)
 
     # Set parameters
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     nz, bw, ngf, ndf, nc, imsize, lr, betas = (
         128,
         4,
@@ -204,7 +206,7 @@ def train(args):
         nz,
         log_dir,
         ckpt_dir,
-        device,
+        torch.device(args.device),
     )
 
     # Train model
