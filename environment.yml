@@ -10,4 +10,3 @@ dependencies:
   - torchvision
   - pytorch
   - tensorboard
-prefix: /deep/group/packages/miniconda3/envs/cs236-dp
