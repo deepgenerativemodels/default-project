@@ -20,4 +20,4 @@ tensorboard --logdir out
 ```
 
 # Acknowledgement
-The baseline model architecture is based off of the Residual SNGAN implementation from [Mimicry: Towards the Reproducibility of GAN Research](https://github.com/kwotsin/mimicry).
+The baseline model is based on the Residual SNGAN implementation from [Mimicry: Towards the Reproducibility of GAN Research](https://github.com/kwotsin/mimicry).
