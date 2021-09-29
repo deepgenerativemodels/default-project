@@ -211,7 +211,7 @@ def train(args):
 
     # Configure schedulers
     sch_g = optim.lr_scheduler.LambdaLR(
-        opt_g, lr_lambda=lambda s: 1.0 - (s / args.max_steps)
+        opt_g, lr_lambda=lambda s: 1.0 - ((s * args.repeat_d) / args.max_steps)
     )
     sch_d = optim.lr_scheduler.LambdaLR(
         opt_d, lr_lambda=lambda s: 1.0 - (s / args.max_steps)
