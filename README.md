@@ -18,3 +18,6 @@ python train.py --name test
 ```shell
 tensorboard --logdir out
 ```
+
+# References
+[Mimicry: Towards the Reproducibility of GAN Research](https://github.com/kwotsin/mimicry)
