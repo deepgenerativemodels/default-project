@@ -4,9 +4,12 @@ channels:
   - defaults
 dependencies:
   - python=3.9
+  - black
   - tqdm
   - cudatoolkit=11.1
   - torchaudio
   - torchvision
   - pytorch
   - tensorboard
+  - ignite
+  - scipy

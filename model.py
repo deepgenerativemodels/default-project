@@ -231,8 +231,8 @@ class Generator(nn.Module):
         nn.init.xavier_uniform_(self.l1.weight.data, 1.0)
         nn.init.xavier_uniform_(self.c6.weight.data, 1.0)
 
-    def forward(self, x):
-        h = self.l1(x)
+    def forward(self, z):
+        h = self.l1(z)
         h = h.view(h.size(0), -1, self.bw, self.bw)
         h = self.block2(h)
         h = self.block3(h)
