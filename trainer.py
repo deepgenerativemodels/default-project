@@ -9,6 +9,15 @@ import torchvision.utils as vutils
 from ignite.metrics.gan import InceptionScore, FID
 
 
+def _prepare_data_for_inception(data):
+    r"""
+    Preprocess data to be feed into the Inception model.
+    """
+
+    data = F.interpolate(data, 299)
+    return data.add_(-data.min()).div_(data.max())
+
+
 def _compute_prob(logits):
     r"""
     Computes probability from model output.
@@ -184,8 +193,9 @@ class Trainer:
         with torch.no_grad():
 
             # Initialize metrics
-            inception_score, fid = InceptionScore(device=self.device), FID(
-                device=self.device
+            inception_score, fid = (
+                InceptionScore(device=self.device),
+                FID(device=self.device),
             )
             metrics = {
                 "L(G)": [],
@@ -204,8 +214,8 @@ class Trainer:
                 loss_g, _, _ = _compute_loss_g(self.net_g, self.net_d, z)
 
                 # Update metrics
-                reals = F.interpolate(reals, 299)
-                fakes = F.interpolate(fakes, 299)
+                reals = _prepare_data_for_inception(reals)
+                fakes = _prepare_data_for_inception(fakes)
                 inception_score.update(fakes)
                 fid.update((fakes, reals))
                 metrics["L(G)"].append(loss_g)
