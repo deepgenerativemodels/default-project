@@ -19,5 +19,5 @@ python train.py --name test
 tensorboard --logdir out
 ```
 
-# References
-[Mimicry: Towards the Reproducibility of GAN Research](https://github.com/kwotsin/mimicry)
+# Acknowledgement
+The baseline model architecture is based off of the Residual SNGAN implementation from [Mimicry: Towards the Reproducibility of GAN Research](https://github.com/kwotsin/mimicry).
