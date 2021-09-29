@@ -12,8 +12,9 @@ import torch.optim as optim
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 
-import model
-import trainer
+from model import Generator32 as Generator
+from model import Discriminator32 as Discriminator
+from trainer import Trainer
 
 
 def parse_args():
@@ -72,7 +73,7 @@ def parse_args():
         help="Minibatch size used during training.",
     )
     parser.add_argument(
-        "--max_steps", type=int, default=100000, help="Number of steps to train for."
+        "--max_steps", type=int, default=120000, help="Number of steps to train for."
     )
     parser.add_argument(
         "--repeat_d",
@@ -89,7 +90,7 @@ def parse_args():
     parser.add_argument(
         "--ckpt_every",
         type=int,
-        default=2000,
+        default=2500,
         help="Number of steps between checkpointing.",
     )
     parser.add_argument(
@@ -128,7 +129,7 @@ def download_data(
                 f.extract(member, path=dst_dir)
 
 
-def prepare_data(data_dir, imsize, batch_size, eval_size=1000, num_workers=4):
+def prepare_data(data_dir, imsize, batch_size, eval_size=1000, num_workers=2):
     r"""
     Creates a dataloader from a directory containing image data.
     """
@@ -193,20 +194,16 @@ def train(args):
     torch.manual_seed(args.seed)
 
     # Set parameters
-    nz, bw, ngf, ndf, nc, imsize, lr, betas = (
+    nz, imsize, lr, betas = (
         128,
-        4,
-        256,
-        128,
-        3,
         32,
         2e-4,
         (0.0, 0.9),
     )
 
     # Configure models
-    net_g = model.Generator(nz, ngf, bw, nc)
-    net_d = model.Discriminator(nc, ndf)
+    net_g = Generator()
+    net_d = Discriminator()
 
     # Configure optimizers
     opt_g = optim.Adam(net_g.parameters(), lr, betas)
@@ -214,7 +211,7 @@ def train(args):
 
     # Configure schedulers
     sch_g = optim.lr_scheduler.LambdaLR(
-        opt_g, lr_lambda=lambda s: 1.0 - (s * args.repeat_d / args.max_steps)
+        opt_g, lr_lambda=lambda s: 1.0 - (s / args.max_steps)
     )
     sch_d = optim.lr_scheduler.LambdaLR(
         opt_d, lr_lambda=lambda s: 1.0 - (s / args.max_steps)
@@ -226,7 +223,7 @@ def train(args):
     )
 
     # Configure trainer
-    trainer_ = trainer.Trainer(
+    trainer = Trainer(
         net_g,
         net_d,
         opt_g,
@@ -242,7 +239,7 @@ def train(args):
     )
 
     # Train model
-    trainer_.train(args.max_steps, args.repeat_d, args.eval_every, args.ckpt_every)
+    trainer.train(args.max_steps, args.repeat_d, args.eval_every, args.ckpt_every)
 
 
 if __name__ == "__main__":

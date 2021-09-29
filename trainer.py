@@ -9,13 +9,25 @@ import torchvision.utils as vutils
 from ignite.metrics.gan import InceptionScore, FID
 
 
-def _prepare_data_for_inception(data):
+def _prepare_data_for_inception(data, device):
     r"""
     Preprocess data to be feed into the Inception model.
     """
 
     data = F.interpolate(data, 299)
-    return data.add_(-data.min()).div_(data.max())
+    data = data.add_(-data.min()).div_(data.max())
+    return data.to(device)
+
+
+def _prepare_data_for_gan(data, nz, device):
+    r"""
+    Helper function to prepare inputs for model.
+    """
+
+    return (
+        data.to(device),
+        torch.randn((data.size(0), nz)).to(device),
+    )
 
 
 def _compute_prob(logits):
@@ -132,7 +144,7 @@ class Trainer:
 
         # Setup checkpointing, evaluation and logging
         self.fixed_z = torch.randn((36, nz), device=device)
-        self.log_writer = tbx.SummaryWriter(log_dir)
+        self.logger = tbx.SummaryWriter(log_dir)
         self.ckpt_dir = ckpt_dir
 
     def _load_checkpoint(self):
@@ -172,16 +184,6 @@ class Trainer:
             ckpt_path,
         )
 
-    def _prepare_data(self, data):
-        r"""
-        Helper function to prepare inputs for model.
-        """
-
-        return (
-            data.to(self.device),
-            torch.randn((data.size(0), self.nz)).to(self.device),
-        )
-
     def _eval(self):
         r"""
         Evaluates model and logs metrics.
@@ -205,40 +207,40 @@ class Trainer:
             }
 
             for data, _ in tqdm(self.eval_dataloader, desc="Evaluating Model"):
-                reals, z = self._prepare_data(data)
 
                 # Compute losses and save intermediate outputs
+                reals, z = _prepare_data_for_gan(data, self.nz, self.device)
                 loss_d, fakes, real_pred, fake_pred = _compute_loss_d(
                     self.net_g, self.net_d, reals, z
                 )
                 loss_g, _, _ = _compute_loss_g(self.net_g, self.net_d, z)
 
                 # Update metrics
-                reals = _prepare_data_for_inception(reals)
-                fakes = _prepare_data_for_inception(fakes)
-                inception_score.update(fakes)
-                fid.update((fakes, reals))
                 metrics["L(G)"].append(loss_g)
                 metrics["L(D)"].append(loss_d)
                 metrics["D(x)"].append(_compute_prob(real_pred))
                 metrics["D(G(z))"].append(_compute_prob(fake_pred))
+                reals = _prepare_data_for_inception(reals, self.device)
+                fakes = _prepare_data_for_inception(fakes, self.device)
+                inception_score.update(fakes)
+                fid.update((fakes, reals))
 
             # Process and log metrics
             for k, v in metrics.items():
                 v = torch.stack(v).mean().item()
-                self.log_writer.add_scalar(k, v, self.step)
-            self.log_writer.add_scalar("lr(G)", self.sch_g.get_last_lr()[0], self.step)
-            self.log_writer.add_scalar("lr(D)", self.sch_d.get_last_lr()[0], self.step)
-            self.log_writer.add_scalar("IS", inception_score.compute(), self.step)
-            self.log_writer.add_scalar("FID", fid.compute(), self.step)
+                self.logger.add_scalar(k, v, self.step)
+            self.logger.add_scalar("lr(G)", self.sch_g.get_last_lr()[0], self.step)
+            self.logger.add_scalar("lr(D)", self.sch_d.get_last_lr()[0], self.step)
+            self.logger.add_scalar("IS", inception_score.compute(), self.step)
+            self.logger.add_scalar("FID", fid.compute(), self.step)
 
             # Create samples using fixed noise
             samples = self.net_g(self.fixed_z)
             samples = F.interpolate(samples, 256).cpu()
             samples = vutils.make_grid(samples, nrow=6, padding=4, normalize=True)
-            self.log_writer.add_image("Samples", samples, self.step)
+            self.logger.add_image("Samples", samples, self.step)
 
-        self.log_writer.flush()
+        self.logger.flush()
 
     def _train_step_g(self, z):
         r"""
@@ -281,7 +283,7 @@ class Trainer:
             for data, _ in pbar:
 
                 # Training step
-                reals, z = self._prepare_data(data)
+                reals, z = _prepare_data_for_gan(data, self.nz, self.device)
                 loss_d = self._train_step_d(reals, z)
                 if self.step % repeat_d == 0:
                     loss_g = self._train_step_g(z)
