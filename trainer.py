@@ -1,10 +1,76 @@
 import os
 
 from tqdm import tqdm
+import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.tensorboard as tbx
 import torchvision.utils as vutils
+from ignite.metrics.gan import InceptionScore, FID
+
+
+def _compute_prob(logits):
+    r"""
+    Computes probability from model output.
+    """
+
+    return torch.sigmoid(logits).mean()
+
+
+def _compute_hinge_loss_g(fake_preds):
+    r"""
+    Computes generator hinge loss.
+    """
+
+    return -fake_preds.mean()
+
+
+def _compute_hinge_loss_d(real_preds, fake_preds):
+    r"""
+    Computes discriminator hinge loss.
+    """
+
+    return F.relu(1.0 - real_preds).mean() + F.relu(1.0 + fake_preds).mean()
+
+
+def _compute_loss_g(net_g, net_d, z):
+    r"""
+    General implementation to compute generator loss.
+    """
+
+    fakes = net_g(z)
+    fake_preds = net_d(fakes).view(-1)
+    loss_g = _compute_hinge_loss_g(fake_preds)
+
+    return loss_g, fakes, fake_preds
+
+
+def _compute_loss_d(net_g, net_d, reals, z):
+    r"""
+    General implementation to compute discriminator loss.
+    """
+
+    real_preds = net_d(reals).view(-1)
+    fakes = net_g(z).detach()
+    fake_preds = net_d(fakes).view(-1)
+    loss_d = _compute_hinge_loss_d(real_preds, fake_preds)
+
+    return loss_d, fakes, real_preds, fake_preds
+
+
+def _train_step(net, opt, sch, loss_func):
+    r"""
+    General implementation to perform a training step.
+    """
+
+    net.train()
+    loss = loss_func()
+    net.zero_grad()
+    loss.backward()
+    opt.step()
+    sch.step()
+
+    return loss
 
 
 class Trainer:
@@ -17,7 +83,8 @@ class Trainer:
         opt_d (Optimizer): Torch optimizer for discriminator.
         sch_g (Scheduler): Torch lr scheduler for generator.
         sch_d (Scheduler): Torch lr scheduler for discriminator.
-        dataloader (Dataloader): Torch training set dataloader.
+        train_dataloader (Dataloader): Torch training set dataloader.
+        eval_dataloader (Dataloader): Torch evaluation set dataloader.
         nz (int): Generator input / noise dimension.
         log_dir (str): Path to store log outputs.
         ckpt_dir (str): Path to store and load checkpoints.
@@ -32,7 +99,8 @@ class Trainer:
         opt_d,
         sch_g,
         sch_d,
-        dataloader,
+        train_dataloader,
+        eval_dataloader,
         nz,
         log_dir,
         ckpt_dir,
@@ -45,7 +113,8 @@ class Trainer:
         self.opt_d = opt_d
         self.sch_g = sch_g
         self.sch_d = sch_d
-        self.dataloader = dataloader
+        self.train_dataloader = train_dataloader
+        self.eval_dataloader = eval_dataloader
 
         # Setup training parameters
         self.device = device
@@ -53,7 +122,7 @@ class Trainer:
         self.step = 0
 
         # Setup checkpointing, evaluation and logging
-        self.fixed_noise = torch.randn((36, nz), device=device)
+        self.fixed_z = torch.randn((36, nz), device=device)
         self.log_writer = tbx.SummaryWriter(log_dir)
         self.ckpt_dir = ckpt_dir
 
@@ -94,108 +163,125 @@ class Trainer:
             ckpt_path,
         )
 
-    def _compute_loss_g(self, fake_preds):
+    def _prepare_data(self, data):
         r"""
-        Calculates generator hinge loss.
+        Helper function to prepare inputs for model.
         """
 
-        return -fake_preds.mean()
+        return (
+            data.to(self.device),
+            torch.randn((data.size(0), self.nz)).to(self.device),
+        )
 
-    def _compute_loss_d(self, real_preds, fake_preds):
+    def _eval(self):
         r"""
-        Calculates discriminator hinge loss.
+        Evaluates model and logs metrics.
         """
 
-        return F.relu(1.0 - real_preds).mean() + F.relu(1.0 + fake_preds).mean()
+        self.net_g.eval()
+        self.net_d.eval()
 
-    def _train_step_g(self, noise):
+        with torch.no_grad():
+
+            # Initialize metrics
+            inception_score, fid = InceptionScore(device=self.device), FID(
+                device=self.device
+            )
+            metrics = {
+                "L(G)": [],
+                "L(D)": [],
+                "D(x)": [],
+                "D(G(z))": [],
+            }
+
+            for data, _ in tqdm(self.eval_dataloader, desc="Evaluating Model"):
+                reals, z = self._prepare_data(data)
+
+                # Compute losses and save intermediate outputs
+                loss_d, fakes, real_pred, fake_pred = _compute_loss_d(
+                    self.net_g, self.net_d, reals, z
+                )
+                loss_g, _, _ = _compute_loss_g(self.net_g, self.net_d, z)
+
+                # Update metrics
+                reals = F.interpolate(reals, 299)
+                fakes = F.interpolate(fakes, 299)
+                inception_score.update(fakes)
+                fid.update((fakes, reals))
+                metrics["L(G)"].append(loss_g)
+                metrics["L(D)"].append(loss_d)
+                metrics["D(x)"].append(_compute_prob(real_pred))
+                metrics["D(G(z))"].append(_compute_prob(fake_pred))
+
+            # Process and log metrics
+            for k, v in metrics.items():
+                v = torch.stack(v).mean().item()
+                self.log_writer.add_scalar(k, v, self.step)
+            self.log_writer.add_scalar("lr(G)", self.sch_g.get_last_lr()[0])
+            self.log_writer.add_scalar("lr(D)", self.sch_d.get_last_lr()[0])
+            self.log_writer.add_scalar("IS", inception_score.compute(), self.step)
+            self.log_writer.add_scalar("FID", fid.compute(), self.step)
+
+            # Create samples using fixed noise
+            samples = self.net_g(self.fixed_z)
+            samples = F.interpolate(samples, 256).cpu()
+            samples = vutils.make_grid(samples, nrow=6, padding=4, normalize=True)
+            self.log_writer.add_image("Samples", samples, self.step)
+
+        self.log_writer.flush()
+
+    def _train_step_g(self, z):
         r"""
         Performs a generator training step.
         """
 
-        fakes = self.net_g(noise)
-        fake_preds = self.net_d(fakes).view(-1)
-        loss_g = self._compute_loss_g(fake_preds)
+        return _train_step(
+            self.net_g,
+            self.opt_g,
+            self.sch_g,
+            lambda: _compute_loss_g(self.net_g, self.net_d, z)[0],
+        )
 
-        self.net_g.zero_grad()
-        loss_g.backward()
-        self.opt_g.step()
-
-        return loss_g.item(), fake_preds.mean().item()
-
-    def _train_step_d(self, reals, noise):
+    def _train_step_d(self, reals, z):
         r"""
         Performs a discriminator training step.
         """
 
-        real_preds = self.net_d(reals).view(-1)
-        fakes = self.net_g(noise).detach()
-        fake_preds = self.net_d(fakes).view(-1)
-        loss_d = self._compute_loss_d(real_preds, fake_preds)
+        return _train_step(
+            self.net_d,
+            self.opt_d,
+            self.sch_d,
+            lambda: _compute_loss_d(self.net_g, self.net_d, reals, z)[0],
+        )
 
-        self.net_d.zero_grad()
-        loss_d.backward()
-        self.opt_d.step()
-
-        return loss_d.item(), real_preds.mean().item()
-
-    def _log(self, loss_g, loss_d, real_pred, fake_pred):
-        r"""
-        Records losses and samples.
-        """
-
-        with torch.no_grad():
-            samples = self.net_g(self.fixed_noise)
-            samples = F.interpolate(samples, 256).cpu()
-            samples = vutils.make_grid(samples, nrow=6, padding=4, normalize=True)
-        self.log_writer.add_image("Samples", samples, self.step)
-        self.log_writer.add_scalar("L(G)", loss_g, self.step)
-        self.log_writer.add_scalar("L(D)", loss_d, self.step)
-        self.log_writer.add_scalar("D(x)", real_pred, self.step)
-        self.log_writer.add_scalar("D(G(z))", fake_pred, self.step)
-        self.log_writer.add_scalar("lr(G)", self.sch_g.get_last_lr()[0], self.step)
-        self.log_writer.add_scalar("lr(D)", self.sch_d.get_last_lr()[0], self.step)
-        self.log_writer.flush()
-
-    def train(self, max_steps, repeat_d, log_every, ckpt_every):
+    def train(self, max_steps, repeat_d, eval_every, ckpt_every):
         r"""
         Performs GAN training, checkpointing and logging.
         Attributes:
             max_steps (int): Number of steps before stopping.
             repeat_d (int): Number of discriminator updates before a generator update.
-            log_every (int): Number of steps before logging to Tensorboard.
+            eval_every (int): Number of steps before logging to Tensorboard.
             ckpt_every (int): Number of steps before checkpointing models.
         """
 
         self._load_checkpoint()
 
         while True:
-            pbar = tqdm(self.dataloader)
+            pbar = tqdm(self.train_dataloader)
             for data, _ in pbar:
 
-                # Prepare inputs
-                reals = data.to(self.device)
-                noise = torch.randn((data.size(0), self.nz)).to(self.device)
-
                 # Training step
-                loss_d, real_pred = self._train_step_d(reals, noise)
+                reals, z = self._prepare_data(data)
+                loss_d = self._train_step_d(reals, z)
                 if self.step % repeat_d == 0:
-                    loss_g, fake_pred = self._train_step_g(noise)
-
-                # Update learning rate
-                self.sch_d.step()
-                self.sch_g.step()
+                    loss_g = self._train_step_g(z)
 
                 pbar.set_description(
-                    (
-                        f"L(G):{loss_g:.2f}|L(D):{loss_d:.2f}|"
-                        f"D(x):{real_pred:.2f}|D(G(z)):{fake_pred:.2f}|"
-                        f"{self.step}/{max_steps}"
-                    )
+                    f"L(G):{loss_g.item():.2f}|L(D):{loss_d.item():.2f}|{self.step}/{max_steps}"
                 )
 
-                if self.step != 0 and self.step % log_every == 0:
-                    self._log(loss_g, loss_d, real_pred, fake_pred)
+                if self.step != 0 and self.step % eval_every == 0:
+                    self._eval()
 
                 if self.step != 0 and self.step % ckpt_every == 0:
                     self._save_checkpoint()

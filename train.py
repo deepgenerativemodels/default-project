@@ -81,15 +81,15 @@ def parse_args():
         help="Number of discriminator updates before a generator update.",
     )
     parser.add_argument(
-        "--log_every",
+        "--eval_every",
         type=int,
-        default=100,
-        help="Number of steps between checkpointing.",
+        default=250,
+        help="Number of steps between model evaluation.",
     )
     parser.add_argument(
         "--ckpt_every",
         type=int,
-        default=1000,
+        default=2000,
         help="Number of steps between checkpointing.",
     )
     parser.add_argument(
@@ -128,25 +128,33 @@ def download_data(
                 f.extract(member, path=dst_dir)
 
 
-def prepare_data(data_dir, imsize, batch_size):
+def prepare_data(data_dir, imsize, batch_size, num_workers=4):
     r"""
     Creates a dataloader from a directory containing image data.
     """
 
-    transform = transforms.Compose(
-        [
-            transforms.Resize(imsize),
-            transforms.CenterCrop(imsize),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-        ]
+    dataset = datasets.ImageFolder(
+        root=data_dir,
+        transform=transforms.Compose(
+            [
+                transforms.Resize(imsize),
+                transforms.CenterCrop(imsize),
+                transforms.ToTensor(),
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+            ]
+        ),
+    )
+    train_dataset, eval_dataset = torch.utils.data.random_split(
+        dataset, [len(dataset) - 2000, 2000]
+    )
+    train_dataloader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+    )
+    eval_dataloader = torch.utils.data.DataLoader(
+        eval_dataset, batch_size=64, num_workers=num_workers
     )
 
-    return torch.utils.data.DataLoader(
-        datasets.ImageFolder(root=data_dir, transform=transform),
-        batch_size=batch_size,
-        shuffle=True,
-    )
+    return train_dataloader, eval_dataloader
 
 
 def train(args):
@@ -192,17 +200,28 @@ def train(args):
         (0.0, 0.9),
     )
 
-    # Configure models, optimizers and schedulers
+    # Configure models
     net_g = model.Generator(nz, ngf, bw, nc)
     net_d = model.Discriminator(nc, ndf)
+
+    # Configure optimizers
     opt_g = optim.Adam(net_g.parameters(), lr, betas)
     opt_d = optim.Adam(net_d.parameters(), lr, betas)
-    linear_sch = lambda s: 1.0 - (s / args.max_steps)
-    sch_g = optim.lr_scheduler.LambdaLR(opt_g, lr_lambda=linear_sch)
-    sch_d = optim.lr_scheduler.LambdaLR(opt_d, lr_lambda=linear_sch)
 
-    # Configure dataloader and trainer
-    dataloader = prepare_data(args.data_dir, imsize, args.batch_size)
+    # Configure schedulers
+    sch_g = optim.lr_scheduler.LambdaLR(
+        opt_g, lr_lambda=lambda s: 1.0 - (s * args.repeat_d / args.max_steps)
+    )
+    sch_d = optim.lr_scheduler.LambdaLR(
+        opt_d, lr_lambda=lambda s: 1.0 - (s / args.max_steps)
+    )
+
+    # Configure dataloaders
+    train_dataloader, eval_dataloader = prepare_data(
+        args.data_dir, imsize, args.batch_size
+    )
+
+    # Configure trainer
     trainer_ = trainer.Trainer(
         net_g,
         net_d,
@@ -210,7 +229,8 @@ def train(args):
         opt_d,
         sch_g,
         sch_d,
-        dataloader,
+        train_dataloader,
+        eval_dataloader,
         nz,
         log_dir,
         ckpt_dir,
@@ -218,7 +238,7 @@ def train(args):
     )
 
     # Train model
-    trainer_.train(args.max_steps, args.repeat_d, args.log_every, args.ckpt_every)
+    trainer_.train(args.max_steps, args.repeat_d, args.eval_every, args.ckpt_every)
 
 
 if __name__ == "__main__":
