@@ -227,8 +227,8 @@ class Trainer:
             for k, v in metrics.items():
                 v = torch.stack(v).mean().item()
                 self.log_writer.add_scalar(k, v, self.step)
-            self.log_writer.add_scalar("lr(G)", self.sch_g.get_last_lr()[0])
-            self.log_writer.add_scalar("lr(D)", self.sch_d.get_last_lr()[0])
+            self.log_writer.add_scalar("lr(G)", self.sch_g.get_last_lr()[0], self.step)
+            self.log_writer.add_scalar("lr(D)", self.sch_d.get_last_lr()[0], self.step)
             self.log_writer.add_scalar("IS", inception_score.compute(), self.step)
             self.log_writer.add_scalar("FID", fid.compute(), self.step)
 
