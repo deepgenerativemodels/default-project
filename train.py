@@ -84,7 +84,7 @@ def parse_args():
     parser.add_argument(
         "--eval_every",
         type=int,
-        default=250,
+        default=500,
         help="Number of steps between model evaluation.",
     )
     parser.add_argument(
@@ -129,7 +129,7 @@ def download_data(
                 f.extract(member, path=dst_dir)
 
 
-def prepare_data(data_dir, imsize, batch_size, eval_size=1000, num_workers=2):
+def prepare_data(data_dir, imsize, batch_size, eval_size=2000, num_workers=4):
     r"""
     Creates a dataloader from a directory containing image data.
     """
