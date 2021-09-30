@@ -187,7 +187,7 @@ class Trainer:
             ckpt_path,
         )
 
-    def _eval(self):
+    def eval(self):
         r"""
         Evaluates model and logs metrics.
         """
@@ -197,18 +197,21 @@ class Trainer:
 
         with torch.no_grad():
 
+            # Create samples using fixed noise
+            samples = self.net_g(self.fixed_z)
+            samples = F.interpolate(samples, 256).cpu()
+            samples = vutils.make_grid(samples, nrow=6, padding=4, normalize=True)
+
             # Initialize metrics
-            is_, fid, kid = (
+            is_, fid, kid, loss_gs, loss_ds, real_preds, fake_preds = (
                 IS().to(self.device),
                 FID().to(self.device),
                 KID().to(self.device),
+                [],
+                [],
+                [],
+                [],
             )
-            metrics = {
-                "L(G)": [],
-                "L(D)": [],
-                "D(x)": [],
-                "D(G(z))": [],
-            }
 
             for data, _ in tqdm(self.eval_dataloader, desc="Evaluating Model"):
 
@@ -220,10 +223,10 @@ class Trainer:
                 loss_g, _, _ = _compute_loss_g(self.net_g, self.net_d, z)
 
                 # Update metrics
-                metrics["L(G)"].append(loss_g)
-                metrics["L(D)"].append(loss_d)
-                metrics["D(x)"].append(_compute_prob(real_pred))
-                metrics["D(G(z))"].append(_compute_prob(fake_pred))
+                loss_gs.append(loss_g)
+                loss_ds.append(loss_d)
+                real_preds.append(_compute_prob(real_pred))
+                fake_preds.append(_compute_prob(fake_pred))
                 reals = _prepare_data_for_inception(reals, self.device)
                 fakes = _prepare_data_for_inception(fakes, self.device)
                 is_.update(fakes)
@@ -232,22 +235,29 @@ class Trainer:
                 kid.update(reals, real=True)
                 kid.update(fakes, real=False)
 
-            # Process and log metrics
-            for k, v in metrics.items():
-                v = torch.stack(v).mean().item()
-                self.logger.add_scalar(k, v, self.step)
-            self.logger.add_scalar("lr(G)", self.sch_g.get_last_lr()[0], self.step)
-            self.logger.add_scalar("lr(D)", self.sch_d.get_last_lr()[0], self.step)
-            self.logger.add_scalar("IS", is_.compute()[0].item(), self.step)
-            self.logger.add_scalar("FID", fid.compute().item(), self.step)
-            self.logger.add_scalar("KID", kid.compute()[0].item(), self.step)
+            # Process metrics
+            metrics = {
+                "L(G)": torch.stack(loss_gs).mean().item(),
+                "L(D)": torch.stack(loss_ds).mean().item(),
+                "D(x)": torch.stack(real_preds).mean().item(),
+                "D(G(z))": torch.stack(fake_preds).mean().item(),
+                "lr(G)": self.sch_g.get_last_lr()[0],
+                "lr(D)": self.sch_d.get_last_lr()[0],
+                "IS": is_.compute()[0].item(),
+                "FID": fid.compute().item(),
+                "KID": kid.compute()[0].item(),
+            }
 
-            # Create samples using fixed noise
-            samples = self.net_g(self.fixed_z)
-            samples = F.interpolate(samples, 256).cpu()
-            samples = vutils.make_grid(samples, nrow=6, padding=4, normalize=True)
-            self.logger.add_image("Samples", samples, self.step)
+        return samples, metrics
 
+    def _log(self, samples, metrics):
+        r"""
+        Logs metrics and samples to Tensorboard.
+        """
+
+        for k, v in metrics.items():
+            self.logger.add_scalar(k, v, self.step)
+        self.logger.add_image("Samples", samples, self.step)
         self.logger.flush()
 
     def _train_step_g(self, z):
@@ -301,7 +311,8 @@ class Trainer:
                 )
 
                 if self.step != 0 and self.step % eval_every == 0:
-                    self._eval()
+                    samples, metrics = self.eval()
+                    self._log(samples, metrics)
 
                 if self.step != 0 and self.step % ckpt_every == 0:
                     self._save_checkpoint()
