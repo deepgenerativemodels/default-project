@@ -6,27 +6,30 @@ import torch
 import torch.nn.functional as F
 import torch.utils.tensorboard as tbx
 import torchvision.utils as vutils
-from ignite.metrics.gan import InceptionScore, FID
+from torchmetrics import IS, FID, KID
 
 
-def _prepare_data_for_inception(data, device):
+def _prepare_data_for_inception(x, device):
     r"""
     Preprocess data to be feed into the Inception model.
     """
 
-    data = F.interpolate(data, 299)
-    data = data.add_(-data.min()).div_(data.max())
-    return data.to(device)
+    x = F.interpolate(x, 299, mode="bicubic", align_corners=False)
+    minv, maxv = float(x.min()), float(x.max())
+    x.clamp_(min=minv, max=maxv).add_(-minv).div_(maxv - minv + 1e-5)
+    x.mul_(255).add_(0.5).clamp_(0, 255)
+
+    return x.to(device).to(torch.uint8)
 
 
-def _prepare_data_for_gan(data, nz, device):
+def _prepare_data_for_gan(x, nz, device):
     r"""
     Helper function to prepare inputs for model.
     """
 
     return (
-        data.to(device),
-        torch.randn((data.size(0), nz)).to(device),
+        x.to(device),
+        torch.randn((x.size(0), nz)).to(device),
     )
 
 
@@ -195,9 +198,10 @@ class Trainer:
         with torch.no_grad():
 
             # Initialize metrics
-            inception_score, fid = (
-                InceptionScore(device=self.device),
-                FID(device=self.device),
+            is_, fid, kid = (
+                IS().to(self.device),
+                FID().to(self.device),
+                KID().to(self.device),
             )
             metrics = {
                 "L(G)": [],
@@ -222,8 +226,11 @@ class Trainer:
                 metrics["D(G(z))"].append(_compute_prob(fake_pred))
                 reals = _prepare_data_for_inception(reals, self.device)
                 fakes = _prepare_data_for_inception(fakes, self.device)
-                inception_score.update(fakes)
-                fid.update((fakes, reals))
+                is_.update(fakes)
+                fid.update(reals, real=True)
+                fid.update(fakes, real=False)
+                kid.update(reals, real=True)
+                kid.update(fakes, real=False)
 
             # Process and log metrics
             for k, v in metrics.items():
@@ -231,8 +238,9 @@ class Trainer:
                 self.logger.add_scalar(k, v, self.step)
             self.logger.add_scalar("lr(G)", self.sch_g.get_last_lr()[0], self.step)
             self.logger.add_scalar("lr(D)", self.sch_d.get_last_lr()[0], self.step)
-            self.logger.add_scalar("IS", inception_score.compute(), self.step)
-            self.logger.add_scalar("FID", fid.compute(), self.step)
+            self.logger.add_scalar("IS", is_.compute()[0].item(), self.step)
+            self.logger.add_scalar("FID", fid.compute().item(), self.step)
+            self.logger.add_scalar("KID", kid.compute()[0].item(), self.step)
 
             # Create samples using fixed noise
             samples = self.net_g(self.fixed_z)
