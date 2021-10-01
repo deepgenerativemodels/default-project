@@ -22,7 +22,7 @@ class Trainer:
         nz (int): Generator input / noise dimension.
         log_dir (str): Path to store log outputs.
         ckpt_dir (str): Path to store and load checkpoints.
-        device (Device): Torch device to dispatch data to.
+        device (Device): Torch device to perform training on.
     """
 
     def __init__(
@@ -62,33 +62,23 @@ class Trainer:
 
     def _state_dict(self):
         return {
-            "net_g": self.net_g,
-            "net_d": self.net_d,
-            "opt_g": self.opt_g,
-            "opt_d": self.opt_d,
-            "sch_g": self.sch_g,
-            "sch_d": self.sch_d,
+            "net_g": self.net_g.state_dict(),
+            "net_d": self.net_d.state_dict(),
+            "opt_g": self.opt_g.state_dict(),
+            "opt_d": self.opt_d.state_dict(),
+            "sch_g": self.sch_g.state_dict(),
+            "sch_d": self.sch_d.state_dict(),
             "step": self.step,
         }
 
     def _load_state_dict(self, state_dict):
-        (
-            self.net_g,
-            self.net_d,
-            self.opt_g,
-            self.opt_d,
-            self.sch_g,
-            self.sch_d,
-            self.step,
-        ) = (
-            state_dict["net_g"],
-            state_dict["net_d"],
-            state_dict["opt_g"],
-            state_dict["opt_d"],
-            state_dict["sch_g"],
-            state_dict["sch_d"],
-            state_dict["step"],
-        )
+        self.net_g.load_state_dict(state_dict["net_g"])
+        self.net_d.load_state_dict(state_dict["net_d"])
+        self.opt_g.load_state_dict(state_dict["opt_g"])
+        self.opt_d.load_state_dict(state_dict["opt_d"])
+        self.sch_g.load_state_dict(state_dict["sch_g"])
+        self.sch_d.load_state_dict(state_dict["sch_d"])
+        self.step = state_dict["step"]
 
     def _load_checkpoint(self):
         r"""
@@ -99,9 +89,7 @@ class Trainer:
         if ckpt_paths:  # Train from scratch if no checkpoints were found
             ckpt_path = sorted(ckpt_paths, key=lambda f: int(f[:-4]))[-1]
             ckpt_path = os.path.join(self.ckpt_dir, ckpt_path)
-            state_dict = self._state_dict()
-            util.load_checkpoint(state_dict, ckpt_path)
-            self._load_state_dict(state_dict)
+            self._load_state_dict(torch.load(ckpt_path))
 
     def _save_checkpoint(self):
         r"""
@@ -109,7 +97,7 @@ class Trainer:
         """
 
         ckpt_path = os.path.join(self.ckpt_dir, f"{self.step}.pth")
-        util.save_checkpoint(self._state_dict(), ckpt_path)
+        torch.save(self._state_dict(), ckpt_path)
 
     def _log(self, metrics, samples):
         r"""
@@ -130,7 +118,12 @@ class Trainer:
             self.net_g,
             self.opt_g,
             self.sch_g,
-            lambda: util.compute_loss_g(self.net_g, self.net_d, z)[0],
+            lambda: util.compute_loss_g(
+                self.net_g,
+                self.net_d,
+                z,
+                util.hinge_loss_g,
+            )[0],
         )
 
     def _train_step_d(self, reals, z):
@@ -142,7 +135,13 @@ class Trainer:
             self.net_d,
             self.opt_d,
             self.sch_d,
-            lambda: util.compute_loss_d(self.net_g, self.net_d, reals, z)[0],
+            lambda: util.compute_loss_d(
+                self.net_g,
+                self.net_d,
+                reals,
+                z,
+                util.hinge_loss_d,
+            )[0],
         )
 
     def train(self, max_steps, repeat_d, eval_every, ckpt_every):
