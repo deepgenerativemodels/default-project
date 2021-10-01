@@ -231,8 +231,9 @@ def eval(net_g, net_d, dataloader, nz, device, samples_z=None):
         }
 
         # Create samples
-        samples = net_g(samples_z) if samples_z is not None else fakes
-        samples = F.interpolate(samples, 256).cpu()
-        samples = vutils.make_grid(samples, nrow=6, padding=4, normalize=True)
+        if samples_z is not None:
+            samples = net_g(samples_z)
+            samples = F.interpolate(samples, 256).cpu()
+            samples = vutils.make_grid(samples, nrow=6, padding=4, normalize=True)
 
-    return metrics, samples
+    return metrics if samples_z is None else (metrics, samples)

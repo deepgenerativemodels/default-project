@@ -85,7 +85,7 @@ def eval(args):
     )
 
     # Evaluate models
-    metrics, _ = util.eval(net_g, net_d, eval_dataloader, nz, args.device)
+    metrics = util.eval(net_g, net_d, eval_dataloader, nz, args.device)
     pprint.pprint(metrics)
 
 
