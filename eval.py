@@ -58,7 +58,11 @@ def eval(args):
     """
 
     # Set parameters
-    nz, eval_size, num_workers = (128, 10000, 4,)
+    nz, eval_size, num_workers = (
+        128,
+        10000,
+        4,
+    )
 
     # Configure models
     if args.im_size == 32:
@@ -71,7 +75,9 @@ def eval(args):
         raise NotImplementedError(f"Unsupported image size '{args.im_size}'.")
 
     # Loads checkpoint
-    util.load_checkpoint({"net_g": net_g, "net_d": net_d}, args.ckpt_path)
+    state_dict = torch.load(args.ckpt_path)
+    net_g.load_state_dict(state_dict["net_g"])
+    net_d.load_state_dict(state_dict["net_d"])
 
     # Configures eval dataloader
     _, eval_dataloader = util.get_dataloaders(

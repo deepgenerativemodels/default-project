@@ -104,7 +104,7 @@ def compute_prob(logits):
     return torch.sigmoid(logits).mean()
 
 
-def compute_hinge_loss_g(fake_preds):
+def hinge_loss_g(fake_preds):
     r"""
     Computes generator hinge loss.
     """
@@ -112,7 +112,7 @@ def compute_hinge_loss_g(fake_preds):
     return -fake_preds.mean()
 
 
-def compute_hinge_loss_d(real_preds, fake_preds):
+def hinge_loss_d(real_preds, fake_preds):
     r"""
     Computes discriminator hinge loss.
     """
@@ -120,19 +120,19 @@ def compute_hinge_loss_d(real_preds, fake_preds):
     return F.relu(1.0 - real_preds).mean() + F.relu(1.0 + fake_preds).mean()
 
 
-def compute_loss_g(net_g, net_d, z):
+def compute_loss_g(net_g, net_d, z, loss_func_g):
     r"""
     General implementation to compute generator loss.
     """
 
     fakes = net_g(z)
     fake_preds = net_d(fakes).view(-1)
-    loss_g = compute_hinge_loss_g(fake_preds)
+    loss_g = loss_func_g(fake_preds)
 
     return loss_g, fakes, fake_preds
 
 
-def compute_loss_d(net_g, net_d, reals, z):
+def compute_loss_d(net_g, net_d, reals, z, loss_func_d):
     r"""
     General implementation to compute discriminator loss.
     """
@@ -140,18 +140,18 @@ def compute_loss_d(net_g, net_d, reals, z):
     real_preds = net_d(reals).view(-1)
     fakes = net_g(z).detach()
     fake_preds = net_d(fakes).view(-1)
-    loss_d = compute_hinge_loss_d(real_preds, fake_preds)
+    loss_d = loss_func_d(real_preds, fake_preds)
 
     return loss_d, fakes, real_preds, fake_preds
 
 
-def train_step(net, opt, sch, loss_func):
+def train_step(net, opt, sch, compute_loss):
     r"""
     General implementation to perform a training step.
     """
 
     net.train()
-    loss = loss_func()
+    loss = compute_loss()
     net.zero_grad()
     loss.backward()
     opt.step()
@@ -160,37 +160,16 @@ def train_step(net, opt, sch, loss_func):
     return loss
 
 
-def load_checkpoint(state_dict, path):
-    r"""
-    Loads checkpoint from path into state_dict.
-    """
-
-    ckpt = torch.load(path)
-    for k, v in state_dict.items():
-        assert k in ckpt, f"Missing key '{k}' from checkpoint at '{path}'."
-        if isinstance(v, nn.Module):
-            v.load_state_dict(ckpt[k])
-        else:
-            state_dict[k] = ckpt[k]
-
-
-def save_checkpoint(state_dict, path):
-    r"""
-    Saves state_dict containing nn.Modules and scalars to path.
-    """
-
-    torch.save(
-        {
-            k: v.state_dict() if isinstance(v, nn.Module) else v
-            for k, v in state_dict.items()
-        },
-        path,
-    )
-
-
 def eval(net_g, net_d, dataloader, nz, device, samples_z=None):
     r"""
     Evaluates model and logs metrics.
+    Attributes:
+        net_g (Module): Torch generator model.
+        net_d (Module): Torch discriminator model.
+        dataloader (Dataloader): Torch evaluation set dataloader.
+        nz (int): Generator input / noise dimension.
+        device (Device): Torch device to perform evaluation on.
+        samples_z (Tensor): Noise tensor to generate samples.
     """
 
     net_g.to(device).eval()
@@ -213,8 +192,19 @@ def eval(net_g, net_d, dataloader, nz, device, samples_z=None):
 
             # Compute losses and save intermediate outputs
             reals, z = prepare_data_for_gan(data, nz, device)
-            loss_d, fakes, real_pred, fake_pred = compute_loss_d(net_g, net_d, reals, z)
-            loss_g, _, _ = compute_loss_g(net_g, net_d, z)
+            loss_d, fakes, real_pred, fake_pred = compute_loss_d(
+                net_g,
+                net_d,
+                reals,
+                z,
+                hinge_loss_d,
+            )
+            loss_g, _, _ = compute_loss_g(
+                net_g,
+                net_d,
+                z,
+                hinge_loss_g,
+            )
 
             # Update metrics
             loss_gs.append(loss_g)
