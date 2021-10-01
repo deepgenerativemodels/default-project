@@ -1,19 +1,12 @@
 import os
 import pprint
-import tarfile
-import tempfile
 import argparse
-import urllib.request
 
-from tqdm import tqdm
 import torch
-import torch.nn as nn
 import torch.optim as optim
-import torchvision.transforms as transforms
-import torchvision.datasets as datasets
 
-from model import Generator32 as Generator
-from model import Discriminator32 as Discriminator
+import util
+from model import *
 from trainer import Trainer
 
 
@@ -28,10 +21,7 @@ def parse_args():
         "--data_dir",
         type=str,
         default=os.path.join(root_dir, "data"),
-        help=(
-            "Path to dataset directory. "
-            "A new dataset will be downloaded if the directory does not exist."
-        ),
+        help="Path to dataset directory.",
     )
     parser.add_argument(
         "--out_dir",
@@ -67,13 +57,22 @@ def parse_args():
         "--seed", type=int, default=0, help="Manual seed for reproducibility."
     )
     parser.add_argument(
+        "--im_size",
+        type=int,
+        default=32,
+        help=(
+            "Images are resized to this resolution. "
+            "Models are automatically selected based on resolution."
+        ),
+    )
+    parser.add_argument(
         "--batch_size",
         type=int,
         default=64,
         help="Minibatch size used during training.",
     )
     parser.add_argument(
-        "--max_steps", type=int, default=120000, help="Number of steps to train for."
+        "--max_steps", type=int, default=150000, help="Number of steps to train for."
     )
     parser.add_argument(
         "--repeat_d",
@@ -90,7 +89,7 @@ def parse_args():
     parser.add_argument(
         "--ckpt_every",
         type=int,
-        default=2500,
+        default=5000,
         help="Number of steps between checkpointing.",
     )
     parser.add_argument(
@@ -103,68 +102,9 @@ def parse_args():
     return parser.parse_args()
 
 
-def download_data(
-    dst_dir, url="http://vision.stanford.edu/aditya86/ImageNetDogs/images.tar"
-):
-    r"""
-    Downloads and uncompresses the specified dataset.
-    """
-
-    def update_download_progress(blk_n=1, blk_sz=1, total_sz=None):
-        assert update_download_progress.pbar is not None
-        pbar = update_download_progress.pbar
-        if total_sz is not None:
-            pbar.total = total_sz
-        pbar.update(blk_n * blk_sz - pbar.n)
-
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_path = os.path.join(tmp_dir, "compressed_data")
-        with tqdm(unit="B", unit_scale=True, desc="Downloading Dataset") as pbar:
-            update_download_progress.pbar = pbar
-            urllib.request.urlretrieve(
-                url, tmp_path, reporthook=update_download_progress
-            )
-        with tarfile.open(tmp_path, "r") as f:
-            for member in tqdm(f.getmembers(), desc="Extracting Dataset"):
-                f.extract(member, path=dst_dir)
-
-
-def prepare_data(data_dir, imsize, batch_size, eval_size=2000, num_workers=4):
-    r"""
-    Creates a dataloader from a directory containing image data.
-    """
-
-    dataset = datasets.ImageFolder(
-        root=data_dir,
-        transform=transforms.Compose(
-            [
-                transforms.Resize(imsize),
-                transforms.CenterCrop(imsize),
-                transforms.ToTensor(),
-                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-            ]
-        ),
-    )
-    eval_dataset, train_dataset = torch.utils.data.random_split(
-        dataset,
-        [eval_size, len(dataset) - eval_size],
-    )
-    eval_dataloader = torch.utils.data.DataLoader(
-        eval_dataset, batch_size=64, num_workers=num_workers
-    )
-    train_dataloader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-    )
-
-    return train_dataloader, eval_dataloader
-
-
 def train(args):
     r"""
-    Sets up environment, configures and trains model.
+    Configures and trains model.
     """
 
     # Print command line arguments and architectures
@@ -172,7 +112,7 @@ def train(args):
 
     # Setup dataset
     if not os.path.exists(args.data_dir):
-        download_data(args.data_dir)
+        raise FileNotFoundError(f"Data directory 'args.data_dir' is not found.")
 
     # Check existing experiment
     exp_dir = os.path.join(args.out_dir, args.name)
@@ -194,16 +134,17 @@ def train(args):
     torch.manual_seed(args.seed)
 
     # Set parameters
-    nz, imsize, lr, betas = (
-        128,
-        32,
-        2e-4,
-        (0.0, 0.9),
-    )
+    nz, lr, betas, eval_size, num_workers = (128, 2e-4, (0.0, 0.9), 1000, 4)
 
     # Configure models
-    net_g = Generator()
-    net_d = Discriminator()
+    if args.im_size == 32:
+        net_g = Generator32()
+        net_d = Discriminator32()
+    elif args.im_size == 64:
+        net_g = Generator64()
+        net_d = Discriminator64()
+    else:
+        raise NotImplementedError(f"Unsupported image size '{args.im_size}'.")
 
     # Configure optimizers
     opt_g = optim.Adam(net_g.parameters(), lr, betas)
@@ -218,8 +159,8 @@ def train(args):
     )
 
     # Configure dataloaders
-    train_dataloader, eval_dataloader = prepare_data(
-        args.data_dir, imsize, args.batch_size
+    train_dataloader, eval_dataloader = util.get_dataloaders(
+        args.data_dir, args.im_size, args.batch_size, eval_size, num_workers
     )
 
     # Configure trainer
