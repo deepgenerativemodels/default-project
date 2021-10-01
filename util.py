@@ -167,7 +167,7 @@ def load_checkpoint(state_dict, path):
 
     ckpt = torch.load(path)
     for k, v in state_dict.items():
-        assert k in ckpt, f"Missing key 'k' from checkpoint at 'path'"
+        assert k in ckpt, f"Missing key '{k}' from checkpoint at '{path}'."
         if isinstance(v, nn.Module):
             v.load_state_dict(ckpt[k])
         else:
