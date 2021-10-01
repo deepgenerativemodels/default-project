@@ -6,6 +6,7 @@ import torch
 
 import util
 from model import *
+from trainer import evaluate
 
 
 def parse_args():
@@ -85,7 +86,7 @@ def eval(args):
     )
 
     # Evaluate models
-    metrics = util.eval(net_g, net_d, eval_dataloader, nz, args.device)
+    metrics = evaluate(net_g, net_d, eval_dataloader, nz, args.device)
     pprint.pprint(metrics)
 
 
