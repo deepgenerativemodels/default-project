@@ -33,7 +33,10 @@ tensorboard --logdir out
 
 > NOTE: Metrics logged during training (e.g. IS, FID, KID) are approximations computed using limited data. Use `eval.py` to compute accurate metrics.
 
-# Baselines
+# Project Instruction
+// TODO
+
+# Baseline Models
 The baseline models are Residual SNGANs from [Mimicry: Towards the Reproducibility of GAN Research](https://github.com/kwotsin/mimicry).
 
 Resolution                |32x32                       |64x64
