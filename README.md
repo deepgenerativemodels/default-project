@@ -28,7 +28,7 @@ python eval.py --ckpt_path PATH_TO_CKPT --im_size RESOLUTION
 * Visualize baselines logs and your experiments using Tensorboard.
 
 ```shell
-tensorboard --logdir out
+tensorboard --logdir out --bind_all
 ```
 
 > NOTE: Metrics logged during training (e.g. IS, FID, KID) are approximations computed using limited data. Use `eval.py` to compute accurate metrics.
