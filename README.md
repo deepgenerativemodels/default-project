@@ -48,6 +48,6 @@ n<sub>iter</sub>          |150k                       |150k
 n<sub>dis</sub>           |5                          |5
 IS                        |6.212                      |7.234
 FID                       |42.452                     |68.360
-KID                       |0.02734                    |0.0624
+KID                       |0.02734                    |0.06240
 Samples                   |![](https://user-images.githubusercontent.com/50810315/135712701-9a154614-1703-4aa4-94a3-54db05908dd8.png)   |![](https://user-images.githubusercontent.com/50810315/135712698-e7294a67-949b-482f-9212-075a7ddb59a6.png)
 
