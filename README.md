@@ -43,7 +43,7 @@ Batch Size                |64                         |64
 β<sub>1</sub>             |0                          |0
 β<sub>2</sub>             |0.9                        |0.9
 lr                        |2e-4                       |2e-4
-lr Decay                  |Linear                     |Linear
+lr<sub>idecay</sub>       |Linear                     |Linear
 n<sub>iter</sub>          |150k                       |150k
 n<sub>dis</sub>           |5                          |5
 IS                        |6.212                      |7.234
