@@ -42,6 +42,11 @@ def download(args):
         args.data_dir, url="http://vision.stanford.edu/aditya86/ImageNetDogs/images.tar"
     )
 
+    util.download_data(
+        args.out_dir,
+        url="https://github.com/deepgenerativemodels/default-project/releases/download/f.2021.v1/baselines.tar",
+    )
+
 
 if __name__ == "__main__":
     download(parse_args())

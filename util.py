@@ -24,13 +24,14 @@ def download_data(dst_dir, url):
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = os.path.join(tmp_dir, "compressed_data")
-        with tqdm(unit="B", unit_scale=True, desc="Downloading Dataset") as pbar:
+        url_name = url.split("/")[-1]
+        with tqdm(unit="B", unit_scale=True, desc=f"Downloading {url_name}") as pbar:
             update_download_progress.pbar = pbar
             urllib.request.urlretrieve(
                 url, tmp_path, reporthook=update_download_progress
             )
         with tarfile.open(tmp_path, "r") as f:
-            for member in tqdm(f.getmembers(), desc="Extracting Dataset"):
+            for member in tqdm(f.getmembers(), desc=f"Extracting {url_name}"):
                 f.extract(member, path=dst_dir)
 
 
