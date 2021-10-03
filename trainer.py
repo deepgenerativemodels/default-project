@@ -357,5 +357,5 @@ class Trainer:
                     self._save_checkpoint()
 
                 self.step += 1
-                if self.step >= max_steps:
+                if self.step > max_steps:
                     return
