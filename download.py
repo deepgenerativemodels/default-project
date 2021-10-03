@@ -44,7 +44,12 @@ def download(args):
 
     util.download_data(
         args.out_dir,
-        url="https://github.com/deepgenerativemodels/default-project/releases/download/f.2021.v1/baselines.tar",
+        url="https://github.com/deepgenerativemodels/default-project/releases/download/f.2021.v2/baselines-150k.tar",
+    )
+    
+    util.download_data(
+        args.out_dir,
+        url="https://github.com/deepgenerativemodels/default-project/releases/download/f.2021.v2/baselines-295k.tar",
     )
 
 
