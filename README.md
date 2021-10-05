@@ -7,6 +7,8 @@ conda env create -f environment.yml
 conda activate cs236-dp
 ```
 
+> NOTE: The PyTorch specified in `environment.yml` uses CUDA 11.1. If your environment do not support CUDA 11.1, please install PyTorch separately by following the [official instructions](https://pytorch.org).
+
 * Download dataset and baseline checkpoints and logs.
 
 ```shell
