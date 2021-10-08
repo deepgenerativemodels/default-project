@@ -1,38 +1,6 @@
-import os
-import tarfile
-import tempfile
-import argparse
-import urllib.request
-
-from tqdm import tqdm
 import torch
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-
-
-def download_data(dst_dir, url):
-    r"""
-    Downloads and uncompresses the specified dataset.
-    """
-
-    def update_download_progress(blk_n=1, blk_sz=1, total_sz=None):
-        assert update_download_progress.pbar is not None
-        pbar = update_download_progress.pbar
-        if total_sz is not None:
-            pbar.total = total_sz
-        pbar.update(blk_n * blk_sz - pbar.n)
-
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_path = os.path.join(tmp_dir, "compressed_data")
-        url_name = url.split("/")[-1]
-        with tqdm(unit="B", unit_scale=True, desc=f"Downloading {url_name}") as pbar:
-            update_download_progress.pbar = pbar
-            urllib.request.urlretrieve(
-                url, tmp_path, reporthook=update_download_progress
-            )
-        with tarfile.open(tmp_path, "r") as f:
-            for member in tqdm(f.getmembers(), desc=f"Extracting {url_name}"):
-                f.extract(member, path=dst_dir)
 
 
 def get_dataloaders(data_dir, imsize, batch_size, eval_size, num_workers=1):

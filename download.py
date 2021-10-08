@@ -1,7 +1,10 @@
 import os
 import argparse
+import tarfile
+import tempfile
+import urllib.request
 
-import util
+from tqdm import tqdm
 
 
 def parse_args():
@@ -33,21 +36,46 @@ def parse_args():
     return parser.parse_args()
 
 
+def download_data(dst_dir, url):
+    r"""
+    Downloads and uncompresses the specified dataset.
+    """
+
+    def update_download_progress(blk_n=1, blk_sz=1, total_sz=None):
+        assert update_download_progress.pbar is not None
+        pbar = update_download_progress.pbar
+        if total_sz is not None:
+            pbar.total = total_sz
+        pbar.update(blk_n * blk_sz - pbar.n)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = os.path.join(tmp_dir, "compressed_data")
+        url_name = url.split("/")[-1]
+        with tqdm(unit="B", unit_scale=True, desc=f"Downloading {url_name}") as pbar:
+            update_download_progress.pbar = pbar
+            urllib.request.urlretrieve(
+                url, tmp_path, reporthook=update_download_progress
+            )
+        with tarfile.open(tmp_path, "r") as f:
+            for member in tqdm(f.getmembers(), desc=f"Extracting {url_name}"):
+                f.extract(member, path=dst_dir)
+
+
 def download(args):
     r"""
     Downloads dataset and baseline models.
     """
 
-    util.download_data(
+    download_data(
         args.data_dir, url="http://vision.stanford.edu/aditya86/ImageNetDogs/images.tar"
     )
 
-    util.download_data(
+    download_data(
         args.out_dir,
         url="https://github.com/deepgenerativemodels/default-project/releases/download/f.2021.v2/baselines-150k.tar",
     )
-    
-    util.download_data(
+
+    download_data(
         args.out_dir,
         url="https://github.com/deepgenerativemodels/default-project/releases/download/f.2021.v2/baselines-295k.tar",
     )
