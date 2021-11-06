@@ -2,11 +2,13 @@ import os
 import pprint
 import argparse
 
+from tqdm import tqdm
 import torch
+from torchmetrics.image.fid import NoTrainInceptionV3
 
 import util
 from model import *
-from trainer import evaluate
+from trainer import evaluate, prepare_data_for_gan, prepare_data_for_inception
 
 
 def parse_args():
@@ -49,8 +51,40 @@ def parse_args():
         default=("cuda:0" if torch.cuda.is_available() else "cpu"),
         help="Device to evaluate on.",
     )
+    parser.add_argument(
+        "--submit",
+        default=False,
+        action="store_true",
+        help="Generate Inception embeddings used for leaderboard submission.",
+    )
 
     return parser.parse_args()
+
+
+def generate_submission(net_g, dataloader, nz, device, path="submission.pth"):
+    r"""
+    Generates Inception embeddings for leaderboard submission.
+    """
+
+    net_g.to(device).eval()
+    inception = NoTrainInceptionV3(
+        name="inception-v3-compat", features_list=["2048"]
+    ).to(device)
+
+    with torch.no_grad():
+        real_embs, fake_embs = [], []
+        for data, _ in tqdm(dataloader, desc="Generating Submission"):
+            reals, z = prepare_data_for_gan(data, nz, device)
+            fakes = net_g(z)
+            reals = inception(prepare_data_for_inception(reals, device))
+            fakes = inception(prepare_data_for_inception(fakes, device))
+            real_embs.append(reals)
+            fake_embs.append(fakes)
+        real_embs = torch.cat(real_embs)
+        fake_embs = torch.cat(fake_embs)
+        embs = torch.stack((real_embs, fake_embs)).permute(1, 0, 2).cpu()
+
+    torch.save(embs, path)
 
 
 def eval(args):
@@ -61,7 +95,7 @@ def eval(args):
     # Set parameters
     nz, eval_size, num_workers = (
         128,
-        10000,
+        4000 if args.submit else 10000,
         4,
     )
 
@@ -85,9 +119,14 @@ def eval(args):
         args.data_dir, args.im_size, args.batch_size, eval_size, num_workers
     )
 
-    # Evaluate models
-    metrics = evaluate(net_g, net_d, eval_dataloader, nz, args.device)
-    pprint.pprint(metrics)
+    if args.submit:
+        # Generate leaderboard submission
+        generate_submission(net_g, eval_dataloader, nz, args.device)
+
+    else:
+        # Evaluate models
+        metrics = evaluate(net_g, net_d, eval_dataloader, nz, args.device)
+        pprint.pprint(metrics)
 
 
 if __name__ == "__main__":
