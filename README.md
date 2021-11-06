@@ -27,6 +27,12 @@ python train.py --name EXPERMENT_NAME
 python eval.py --ckpt_path PATH_TO_CKPT --im_size RESOLUTION
 ```
 
+* Create leaderboard submission `submission.pth` (upload to Gradescope).
+
+```shell
+python eval.py --ckpt_path PATH_TO_CKPT --im_size RESOLUTION --submit
+```
+
 * Visualize baseline logs and your experiments using Tensorboard.
 
 ```shell
