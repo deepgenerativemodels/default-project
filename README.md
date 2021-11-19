@@ -9,7 +9,7 @@ conda activate cs236-dp
 
 > NOTE: PyTorch dependency specified in `environment.yml` uses CUDA 11.1. If CUDA 11.1 is unsupported on your environment, please install PyTorch separately by following the [official instructions](https://pytorch.org).
 
-* Download dataset and baseline checkpoints and logs.
+* Download dataset and baseline checkpoints.
 
 ```shell
 python download.py
@@ -33,7 +33,7 @@ python eval.py --ckpt_path PATH_TO_CKPT --im_size RESOLUTION
 python eval.py --ckpt_path PATH_TO_CKPT --im_size RESOLUTION --submit
 ```
 
-* Visualize baseline logs and your experiments using Tensorboard.
+* Visualize training logs using Tensorboard.
 
 ```shell
 tensorboard --logdir out --bind_all
