@@ -1,4 +1,7 @@
-# Quick Start
+# Default Project
+This repo contains the starter code for the default final project. An up-to-date baseline GAN implementation, relevant metrics and dataset are provided.
+
+## Installation
 * Install [Miniconda](https://docs.conda.io/en/latest/miniconda.html) package manager.
 * Create and activate conda environment.
 
@@ -6,8 +9,6 @@
 conda env create -f environment.yml
 conda activate cs236-dp
 ```
-
-> NOTE: PyTorch dependency specified in `environment.yml` uses CUDA 11.1. If CUDA 11.1 is unsupported on your environment, please install PyTorch separately by following the [official instructions](https://pytorch.org).
 
 * Download dataset and baseline checkpoints.
 
@@ -41,7 +42,7 @@ tensorboard --logdir out --bind_all
 
 > NOTE: Metrics logged during training (e.g. IS, FID, KID) are approximations computed using limited data. Use `eval.py` to compute accurate metrics.
 
-# Baseline Models
+## Baseline
 The baseline models are Residual SNGANs from [Mimicry: Towards the Reproducibility of GAN Research](https://github.com/kwotsin/mimicry).
 
     
@@ -61,4 +62,3 @@ FID                       |42.452                     |68.360                   
 KID                       |0.02734                    |0.06240                    |0.01984                    |0.05556
 Samples                   |![](https://user-images.githubusercontent.com/50810315/135712701-9a154614-1703-4aa4-94a3-54db05908dd8.png)|![](https://user-images.githubusercontent.com/50810315/135712698-e7294a67-949b-482f-9212-075a7ddb59a6.png)|![](https://user-images.githubusercontent.com/50810315/135767248-06df651c-1bba-4f51-9d8c-31d3c9c9c4ff.png)|![](https://user-images.githubusercontent.com/50810315/135767245-e37ed07f-f71c-4a82-81e7-9b88277f73aa.png)
 
-> NOTE: Use 150k baselines to benchmark models trained from scratch and use 295k baselines if your models don't involve training from scratch.
