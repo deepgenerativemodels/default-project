@@ -1,5 +1,5 @@
 # Default Project
-This repo contains the starter code for the default final project. An up-to-date baseline GAN implementation, relevant metrics and dataset are provided.
+This repo contains the starter code for the CS236 default final project. A baseline GAN implementation, relevant metrics and dataset are provided.
 
 ## Installation
 * Install [Miniconda](https://docs.conda.io/en/latest/miniconda.html) package manager.
