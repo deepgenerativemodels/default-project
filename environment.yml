@@ -1,4 +1,4 @@
-name: cs236-dp
+name: cs236
 channels:
   - conda-forge
   - defaults
