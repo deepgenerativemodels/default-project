@@ -1,5 +1,5 @@
-# Default Project
-This repo contains the starter code for the CS236 default final project. A baseline GAN implementation, relevant metrics and dataset are provided.
+# CS236 Default Project
+This repository contains Stanford CS236 default final project starter code. The baseline models are Residual SNGANs from [Mimicry: Towards the Reproducibility of GAN Research](https://github.com/kwotsin/mimicry).
 
 ## Installation
 * Install [Miniconda](https://docs.conda.io/en/latest/miniconda.html) package manager.
@@ -42,9 +42,7 @@ tensorboard --logdir out --bind_all
 
 > NOTE: Metrics logged during training (e.g. IS, FID, KID) are approximations computed using limited data. Use `eval.py` to compute accurate metrics.
 
-## Baselines
-The baseline models are Residual SNGANs from [Mimicry: Towards the Reproducibility of GAN Research](https://github.com/kwotsin/mimicry).
-
+## Metrics
     
 |                         |Baseline-32-150k           |Baseline-64-150k           |Baseline-32-295k           |Baseline-64-295k
 :------------------------:|:-------------------------:|:-------------------------:|:-------------------------:|:-------------------------:
