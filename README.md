@@ -7,7 +7,7 @@ This repository contains Stanford CS236 default final project starter code. The 
 
 ```shell
 conda env create -f environment.yml
-conda activate cs236-dp
+conda activate cs236
 ```
 
 * Download dataset and baseline checkpoints.
